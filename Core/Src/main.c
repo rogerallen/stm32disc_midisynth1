@@ -29,6 +29,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "../../Drivers/BSP/STM32F4-Discovery/stm32f4_discovery_audio.h"
+#include "../../Drivers/USBH_midi_class/Inc/usbh_MIDI.h"
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -61,6 +62,8 @@
 #define INITIAL_VOLUME 60
 #define SAMPLE_RATE    48000
 float   CHROMATIC_BASE = pow(2.0f, 1.0f / 12.0f);
+
+#define RX_BUFF_SIZE 64 /* USB MIDI buffer : max received data 64 bytes */
 
 /* USER CODE END PD */
 
@@ -102,6 +105,11 @@ float cur_wave_table_phase = 0.0;
 float cur_note_hz = 440.0;
 // play only when button is down
 float cur_volume = 0.0;
+
+extern USBH_HandleTypeDef hUsbHostFS;
+
+uint8_t MIDI_RX_Buffer[RX_BUFF_SIZE]; // MIDI reception buffer
+
 
 /* USER CODE END PV */
 
@@ -178,6 +186,10 @@ int main(void)
   MX_USB_HOST_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  // just once at the beginning, start the first reception
+
+  USBH_MIDI_Receive(&hUsbHostFS, MIDI_RX_Buffer, RX_BUFF_SIZE);
 
   audio_init();
   DebugLog("Midisynth Initialized\r\n");
@@ -600,6 +612,15 @@ void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
 void BSP_AUDIO_OUT_TransferComplete_CallBack(void)
 {
   update_audio_buffer(AUDIO_BUFFER_FRAMES/2, AUDIO_BUFFER_FRAMES/2);
+}
+
+// ======================================================================
+void USBH_MIDI_ReceiveCallback(USBH_HandleTypeDef *phost)
+{
+  // each USB midi package is 4 bytes long
+  uint16_t numberOfPackets = USBH_MIDI_GetLastReceivedDataSize(&hUsbHostFS) / 4;
+  DebugLog("midi received %d packets.\r\n", numberOfPackets);
+  USBH_MIDI_Receive(&hUsbHostFS, MIDI_RX_Buffer, RX_BUFF_SIZE); // start a new reception
 }
 
 /* USER CODE END 4 */

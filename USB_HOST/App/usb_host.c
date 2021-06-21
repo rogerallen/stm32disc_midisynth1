@@ -27,6 +27,8 @@
 
 /* USER CODE BEGIN Includes */
 
+#include "../../Drivers/USBH_midi_class/Inc/usbh_MIDI.h"
+
 /* USER CODE END Includes */
 
 /* USER CODE BEGIN PV */
@@ -69,7 +71,19 @@ static void USBH_UserProcess(USBH_HandleTypeDef *phost, uint8_t id);
 void MX_USB_HOST_Init(void)
 {
   /* USER CODE BEGIN USB_HOST_Init_PreTreatment */
-
+  if (USBH_Init(&hUsbHostFS, USBH_UserProcess, HOST_FS) != USBH_OK)
+  {
+    Error_Handler();
+  }
+  if (USBH_RegisterClass(&hUsbHostFS, USBH_MIDI_CLASS) != USBH_OK)
+  {
+    Error_Handler();
+  }
+  if (USBH_Start(&hUsbHostFS) != USBH_OK)
+  {
+    Error_Handler();
+  }
+  return;  // !!! EARLY RETURN !!!
   /* USER CODE END USB_HOST_Init_PreTreatment */
 
   /* Init host Library, add supported class and start the library. */
