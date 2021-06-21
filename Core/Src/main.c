@@ -24,6 +24,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "../../Drivers/BSP/STM32F4-Discovery/stm32f4_discovery_audio.h"
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -37,6 +39,25 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+// we have 4 leds
+#define MAX_LED_IDX 4
+// and a number of notes in the song
+#define MAX_NOTE_IDX 30
+
+// defines for wave table
+#define WAVE_TABLE_LENGTH 256
+
+// defines for audio buffer sizing
+#define AUDIO_BUFFER_FRAMES   256
+#define AUDIO_BUFFER_CHANNELS 2
+#define AUDIO_BUFFER_SAMPLES  AUDIO_BUFFER_FRAMES * AUDIO_BUFFER_CHANNELS
+#define AUDIO_BUFFER_BYTES    sizeof(int16_t)*AUDIO_BUFFER_SAMPLES
+
+#define INITIAL_VOLUME 60
+#define SAMPLE_RATE    48000
+float   CHROMATIC_BASE = pow(2.0f, 1.0f / 12.0f);
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -48,6 +69,7 @@
 I2C_HandleTypeDef hi2c1;
 
 I2S_HandleTypeDef hi2s3;
+DMA_HandleTypeDef hdma_spi3_tx;
 
 SPI_HandleTypeDef hspi1;
 
@@ -55,11 +77,34 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
+// audio buffer that is sent over I2S to DAC
+uint16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
+// wave table that is used to update the audio_buffer
+float wave_table[WAVE_TABLE_LENGTH];
+// each button push updates an index.  use that index to flash leds
+// rotate clockwise:       LD3/orange, LD5/red, LD6/blue, LD4/green
+uint16_t idx_to_led_pin[] = { LD3_Pin, LD5_Pin, LD6_Pin, LD4_Pin };
+// also use index to play different notes.
+// set up a small chromatic scale to use
+typedef enum { C4 = 60, Cs4, D4, Ds4, E4, F4, Fs4, G4, Gs4, A4, As4, B4 } note_t;
+// play a recognizable tune.
+note_t idx_to_note[] = {
+    E4, E4, F4, G4,  G4, F4, E4, D4,  C4, C4, D4, E4,  E4, D4, D4,
+    E4, E4, F4, G4,  G4, F4, E4, D4,  C4, C4, D4, E4,  D4, C4, C4
+};
+// the wave table has a pointer to the current sample
+float cur_wave_table_phase = 0.0;
+// button pushes update the note
+float cur_note_hz = 440.0;
+// play only when button is down
+float cur_volume = 0.0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2S3_Init(void);
 static void MX_SPI1_Init(void);
@@ -67,7 +112,13 @@ static void MX_USART2_UART_Init(void);
 void MX_USB_HOST_Process(void);
 
 /* USER CODE BEGIN PFP */
+
 void DebugLog(const char *fmt, ...);
+float note_to_freq(uint8_t note);
+void init_wave_table(void);
+void init_audio_buffer(void);
+void audio_init(void);
+uint8_t update_state(uint8_t cur_idx);
 
 /* USER CODE END PFP */
 
@@ -93,6 +144,9 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
 
+  // keep track of the current note & led index
+  uint8_t cur_idx = 255;
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -113,12 +167,15 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_I2C1_Init();
   MX_I2S3_Init();
   MX_SPI1_Init();
   MX_USB_HOST_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  audio_init();
   DebugLog("Midisynth Initialized\r\n");
 
   /* USER CODE END 2 */
@@ -131,6 +188,9 @@ int main(void)
     MX_USB_HOST_Process();
 
     /* USER CODE BEGIN 3 */
+    cur_idx = update_state(cur_idx);
+    HAL_Delay(50);
+
   }
   /* USER CODE END 3 */
 }
@@ -240,7 +300,7 @@ static void MX_I2S3_Init(void)
   hi2s3.Init.Standard = I2S_STANDARD_PHILIPS;
   hi2s3.Init.DataFormat = I2S_DATAFORMAT_16B;
   hi2s3.Init.MCLKOutput = I2S_MCLKOUTPUT_ENABLE;
-  hi2s3.Init.AudioFreq = I2S_AUDIOFREQ_96K;
+  hi2s3.Init.AudioFreq = I2S_AUDIOFREQ_48K;
   hi2s3.Init.CPOL = I2S_CPOL_LOW;
   hi2s3.Init.ClockSource = I2S_CLOCK_PLL;
   hi2s3.Init.FullDuplexMode = I2S_FULLDUPLEXMODE_DISABLE;
@@ -322,6 +382,22 @@ static void MX_USART2_UART_Init(void)
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Stream5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
 
 }
 
@@ -418,6 +494,107 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+// ======================================================================
+// read the user button & on edges, update the LEDs & cur_idx
+// also update cur_note_hz, cur_volume
+// return the updated cur_idx
+uint8_t update_state(uint8_t cur_idx)
+{
+
+  static GPIO_PinState last_user_button_state = GPIO_PIN_RESET;
+
+  GPIO_PinState user_button_state = HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin);
+  if((last_user_button_state == GPIO_PIN_RESET) &&
+     (user_button_state == GPIO_PIN_SET)) {
+    cur_idx = cur_idx + 1; // wraps at 255 -> 0
+    HAL_GPIO_WritePin(GPIOD, idx_to_led_pin[cur_idx%MAX_LED_IDX], GPIO_PIN_RESET);
+    cur_note_hz = note_to_freq(idx_to_note[cur_idx%MAX_NOTE_IDX]);
+    HAL_GPIO_WritePin(GPIOD, idx_to_led_pin[cur_idx%MAX_LED_IDX], user_button_state);
+    cur_volume = 1.0;
+  }
+  else if ((last_user_button_state == GPIO_PIN_SET) &&
+           (user_button_state == GPIO_PIN_RESET)) {
+    HAL_GPIO_WritePin(GPIOD, idx_to_led_pin[cur_idx%MAX_LED_IDX], user_button_state);
+    cur_volume = 0.0;
+  }
+  last_user_button_state = user_button_state;
+
+  return cur_idx;
+
+}
+
+// ======================================================================
+// convert midi note index to frequency in Hz.  A4 440Hz = midi note 69
+float note_to_freq(uint8_t note)
+{
+  return 440*pow(CHROMATIC_BASE, (float)note - 69);
+}
+
+// ======================================================================
+// create a wave_table with a single sine wave cycle.
+// values are stored as float to make further math easy.
+void init_wave_table(void)
+{
+  float phase_inc = (2.0f * (float)M_PI) / (float)WAVE_TABLE_LENGTH;
+  float phase = 0;
+  for (int i = 0; i < WAVE_TABLE_LENGTH; i++) {
+    wave_table[i] = sin(phase);
+    phase += phase_inc;
+  }
+}
+
+// ======================================================================
+// using cur_phase, read from wave_table[] and update the
+// audio_buffer from start to start+num_frames
+void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
+{
+
+  float cur_wave_table_phase_inc = (cur_note_hz / SAMPLE_RATE) * WAVE_TABLE_LENGTH;
+
+  for(int frame = start_frame; frame < start_frame+num_frames; frame++) {
+    float sample_f = cur_volume * wave_table[(uint32_t)cur_wave_table_phase];
+    uint16_t sample = (uint16_t)(INT16_MAX*sample_f + INT16_MAX);
+    // each frame is 2 samples
+    audio_buffer[2*frame] = sample;
+    audio_buffer[2*frame+1] = sample;
+    cur_wave_table_phase += cur_wave_table_phase_inc;
+    if(cur_wave_table_phase > WAVE_TABLE_LENGTH) {
+      cur_wave_table_phase -= WAVE_TABLE_LENGTH;
+    }
+  }
+}
+
+// ======================================================================
+void audio_init(void)
+{
+  init_wave_table();
+  update_audio_buffer(0, AUDIO_BUFFER_FRAMES);
+
+  if(BSP_AUDIO_OUT_Init(OUTPUT_DEVICE_HEADPHONE, INITIAL_VOLUME, SAMPLE_RATE) != AUDIO_OK) {
+    Error_Handler();
+  }
+
+  // tell the chip to start DMA from audio_buffer
+  BSP_AUDIO_OUT_Play(&(audio_buffer[0]), AUDIO_BUFFER_BYTES);
+}
+
+// ======================================================================
+// after the first half of the audio_buffer has been
+// transferred, fill that portion with new samples
+// while the second half is being played.
+void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
+{
+  update_audio_buffer(0, AUDIO_BUFFER_FRAMES/2);
+}
+
+// ======================================================================
+// now the second half has been transferred.
+// fill in the second half with new samples
+void BSP_AUDIO_OUT_TransferComplete_CallBack(void)
+{
+  update_audio_buffer(AUDIO_BUFFER_FRAMES/2, AUDIO_BUFFER_FRAMES/2);
+}
 
 /* USER CODE END 4 */
 
