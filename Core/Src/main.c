@@ -125,7 +125,6 @@ void MX_USB_HOST_Process(void);
 
 /* USER CODE BEGIN PFP */
 
-void DebugLog(const char *fmt, ...);
 float note_to_freq(uint8_t note);
 void init_wave_table(void);
 void init_audio_buffer(void);
@@ -137,14 +136,19 @@ uint8_t update_state(uint8_t cur_idx);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void DebugLog(const char *fmt, ...) {
-  char buf[256];
-  va_list args;
-  va_start(args, fmt);
-  int n = vsnprintf(buf, sizeof(buf), fmt, args);
-  va_end(args);
-  HAL_UART_Transmit(&huart2, (unsigned char *)buf, n, HAL_MAX_DELAY);
+int __io_putchar(int ch) {
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, 0xFFFF);
+  return ch;
 }
+// Without syscall.c integrated, a customized _write function has to be defined:
+int _write(int file, char *ptr, int len){
+  int DataIdx;
+  for (DataIdx = 0; DataIdx < len; DataIdx++){
+    __io_putchar( *ptr++ );
+  }
+  return len;
+}
+
 
 /* USER CODE END 0 */
 
@@ -192,7 +196,7 @@ int main(void)
   USBH_MIDI_Receive(&hUsbHostFS, MIDI_RX_Buffer, RX_BUFF_SIZE);
 
   audio_init();
-  DebugLog("Midisynth Initialized\r\n");
+  printf("Midisynth Initialized\r\n");
 
   /* USER CODE END 2 */
 
@@ -529,7 +533,7 @@ uint8_t update_state(uint8_t cur_idx)
     cur_note_hz = note_to_freq(idx_to_note[cur_idx%MAX_NOTE_IDX]);
     HAL_GPIO_WritePin(GPIOD, idx_to_led_pin[cur_idx%MAX_LED_IDX], user_button_state);
     cur_volume = 1.0;
-    DebugLog("note = %d\r\n", idx_to_note[cur_idx%MAX_NOTE_IDX]);
+    printf("note = %d\r\n", idx_to_note[cur_idx%MAX_NOTE_IDX]);
   }
   else if ((last_user_button_state == GPIO_PIN_SET) &&
            (user_button_state == GPIO_PIN_RESET)) {
@@ -619,7 +623,7 @@ void USBH_MIDI_ReceiveCallback(USBH_HandleTypeDef *phost)
 {
   // each USB midi package is 4 bytes long
   uint16_t numberOfPackets = USBH_MIDI_GetLastReceivedDataSize(&hUsbHostFS) / 4;
-  DebugLog("midi received %d packets.\r\n", numberOfPackets);
+  printf("midi received %d packets.\r\n", numberOfPackets);
   USBH_MIDI_Receive(&hUsbHostFS, MIDI_RX_Buffer, RX_BUFF_SIZE); // start a new reception
 }
 
