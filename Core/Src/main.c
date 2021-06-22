@@ -632,9 +632,38 @@ void USBH_MIDI_ReceiveCallback(USBH_HandleTypeDef *phost)
 {
   // each USB midi package is 4 bytes long
   uint16_t numberOfPackets = USBH_MIDI_GetLastReceivedDataSize(&hUsbHostFS) / 4;
-  printf("midi received %d packets.\r\n", numberOfPackets);
-  printf("%02x %02x %02x %02x\r\n",MIDI_RX_Buffer[0], MIDI_RX_Buffer[1],MIDI_RX_Buffer[2],MIDI_RX_Buffer[3]);
-  USBH_MIDI_Receive(&hUsbHostFS, MIDI_RX_Buffer, RX_BUFF_SIZE); // start a new reception
+  //printf("midi received %d packets.\r\n", numberOfPackets);
+  for(int i = 0; i < numberOfPackets; ++i) {
+    uint8_t cin_cable   = MIDI_RX_Buffer[4*i+0];
+    uint8_t midi_cmd    = MIDI_RX_Buffer[4*i+1];
+    uint8_t midi_param0 = MIDI_RX_Buffer[4*i+2];
+    uint8_t midi_param1 = MIDI_RX_Buffer[4*i+3];
+    if(cin_cable == 0) {
+      continue;
+    }
+    switch(midi_cmd & 0xf0) {
+    case 0x80: // Note off
+      cur_volume = 0.0;
+      printf("Note off\r\n");
+      break;
+    case 0x90: // Note on
+      cur_note_hz = note_to_freq(midi_param0);
+      cur_volume = (float)midi_param1/127.0;
+      printf("Note on: %d %d\r\n", midi_param0, midi_param1);
+      break;
+    case 0xa0: // Aftertouch
+    case 0xB0: // Continuous controller
+    case 0xC0: // Patch change
+    case 0xD0: // Channel Pressure
+    case 0xE0: // Pitch bend
+    case 0xF0: // (non-musical commands)
+      printf("%d: %02x %02x %02x %02x\r\n", i, cin_cable, midi_cmd, midi_param0, midi_param1);
+      printf("command not handled\r\n", midi_cmd & 0xf0);
+      break;
+    }
+  }
+  // start a new reception
+  USBH_MIDI_Receive(&hUsbHostFS, MIDI_RX_Buffer, RX_BUFF_SIZE);
 }
 
 /* USER CODE END 4 */
