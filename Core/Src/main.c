@@ -107,6 +107,7 @@ float cur_note_hz = 440.0;
 float cur_volume = 0.0;
 
 extern USBH_HandleTypeDef hUsbHostFS;
+extern ApplicationTypeDef Appli_state;
 
 uint8_t MIDI_RX_Buffer[RX_BUFF_SIZE]; // MIDI reception buffer
 
@@ -162,7 +163,7 @@ int main(void)
 
   // keep track of the current note & led index
   uint8_t cur_idx = 255;
-
+  ApplicationTypeDef last_Appli_state = Appli_state;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -193,7 +194,6 @@ int main(void)
 
   // just once at the beginning, start the first reception
 
-  USBH_MIDI_Receive(&hUsbHostFS, MIDI_RX_Buffer, RX_BUFF_SIZE);
 
   audio_init();
   printf("Midisynth Initialized\r\n");
@@ -208,7 +208,16 @@ int main(void)
     MX_USB_HOST_Process();
 
     /* USER CODE BEGIN 3 */
+    if(last_Appli_state != Appli_state) {
+      printf("appli_state = %d\r\n", Appli_state);
+      last_Appli_state = Appli_state;
 
+      if(Appli_state == APPLICATION_READY) {
+        printf("USBH_MIDI_Receive\r\n");
+        USBH_MIDI_Receive(&hUsbHostFS, MIDI_RX_Buffer, RX_BUFF_SIZE);
+      }
+
+    }
     cur_idx = update_state(cur_idx);
     HAL_Delay(50);
 
@@ -624,6 +633,7 @@ void USBH_MIDI_ReceiveCallback(USBH_HandleTypeDef *phost)
   // each USB midi package is 4 bytes long
   uint16_t numberOfPackets = USBH_MIDI_GetLastReceivedDataSize(&hUsbHostFS) / 4;
   printf("midi received %d packets.\r\n", numberOfPackets);
+  printf("%02x %02x %02x %02x\r\n",MIDI_RX_Buffer[0], MIDI_RX_Buffer[1],MIDI_RX_Buffer[2],MIDI_RX_Buffer[3]);
   USBH_MIDI_Receive(&hUsbHostFS, MIDI_RX_Buffer, RX_BUFF_SIZE); // start a new reception
 }
 
