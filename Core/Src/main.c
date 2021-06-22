@@ -88,17 +88,8 @@ UART_HandleTypeDef huart2;
 uint16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
 // wave table that is used to update the audio_buffer
 float wave_table[WAVE_TABLE_LENGTH];
-// each button push updates an index.  use that index to flash leds
-// rotate clockwise:       LD3/orange, LD5/red, LD6/blue, LD4/green
-uint16_t idx_to_led_pin[] = { LD3_Pin, LD5_Pin, LD6_Pin, LD4_Pin };
-// also use index to play different notes.
 // set up a small chromatic scale to use
 typedef enum { C4 = 60, Cs4, D4, Ds4, E4, F4, Fs4, G4, Gs4, A4, As4, B4 } note_t;
-// play a recognizable tune.
-note_t idx_to_note[] = {
-    E4, E4, F4, G4,  G4, F4, E4, D4,  C4, C4, D4, E4,  E4, D4, D4,
-    E4, E4, F4, G4,  G4, F4, E4, D4,  C4, C4, D4, E4,  D4, C4, C4
-};
 // the wave table has a pointer to the current sample
 float cur_wave_table_phase = 0.0;
 // button pushes update the note
@@ -130,7 +121,7 @@ float note_to_freq(uint8_t note);
 void init_wave_table(void);
 void init_audio_buffer(void);
 void audio_init(void);
-uint8_t update_state(uint8_t cur_idx);
+void update_state(void);
 
 /* USER CODE END PFP */
 
@@ -162,7 +153,6 @@ int main(void)
   /* USER CODE BEGIN 1 */
 
   // keep track of the current note & led index
-  uint8_t cur_idx = 255;
   ApplicationTypeDef last_Appli_state = Appli_state;
   /* USER CODE END 1 */
 
@@ -218,8 +208,7 @@ int main(void)
       }
 
     }
-    cur_idx = update_state(cur_idx);
-    //HAL_Delay(50);
+    update_state();
 
   }
   /* USER CODE END 3 */
@@ -526,10 +515,8 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 // ======================================================================
-// read the user button & on edges, update the LEDs & cur_idx
-// also update cur_note_hz, cur_volume
-// return the updated cur_idx
-uint8_t update_state(uint8_t cur_idx)
+// read the user button & on edges, update the LEDs, cur_note_hz, cur_volume
+void update_state(void)
 {
 
   static GPIO_PinState last_user_button_state = GPIO_PIN_RESET;
@@ -537,21 +524,19 @@ uint8_t update_state(uint8_t cur_idx)
   GPIO_PinState user_button_state = HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin);
   if((last_user_button_state == GPIO_PIN_RESET) &&
      (user_button_state == GPIO_PIN_SET)) {
-    cur_idx = cur_idx + 1; // wraps at 255 -> 0
-    HAL_GPIO_WritePin(GPIOD, idx_to_led_pin[cur_idx%MAX_LED_IDX], GPIO_PIN_RESET);
-    cur_note_hz = note_to_freq(idx_to_note[cur_idx%MAX_NOTE_IDX]);
-    HAL_GPIO_WritePin(GPIOD, idx_to_led_pin[cur_idx%MAX_LED_IDX], user_button_state);
+    HAL_GPIO_WritePin(LED_Port, ORANGE_LED, GPIO_PIN_RESET);
+    cur_note_hz = note_to_freq(A4);
+    HAL_GPIO_WritePin(LED_Port, ORANGE_LED, user_button_state);
     cur_volume = 1.0;
-    printf("note = %d\r\n", idx_to_note[cur_idx%MAX_NOTE_IDX]);
+    printf("pushbutton note_on\r\n");
   }
   else if ((last_user_button_state == GPIO_PIN_SET) &&
            (user_button_state == GPIO_PIN_RESET)) {
-    HAL_GPIO_WritePin(GPIOD, idx_to_led_pin[cur_idx%MAX_LED_IDX], user_button_state);
+    HAL_GPIO_WritePin(LED_Port, ORANGE_LED, user_button_state);
     cur_volume = 0.0;
+    printf("pushbutton note_off\r\n");
   }
   last_user_button_state = user_button_state;
-
-  return cur_idx;
 
 }
 
