@@ -219,7 +219,7 @@ int main(void)
 
     }
     cur_idx = update_state(cur_idx);
-    HAL_Delay(50);
+    //HAL_Delay(50);
 
   }
   /* USER CODE END 3 */
@@ -644,7 +644,7 @@ void USBH_MIDI_ReceiveCallback(USBH_HandleTypeDef *phost)
     switch(midi_cmd & 0xf0) {
     case 0x80: // Note off
       cur_volume = 0.0;
-      printf("Note off\r\n");
+      printf("Note off: %d %d\r\n", midi_param0, midi_param1);
       break;
     case 0x90: // Note on
       cur_note_hz = note_to_freq(midi_param0);
@@ -658,7 +658,7 @@ void USBH_MIDI_ReceiveCallback(USBH_HandleTypeDef *phost)
     case 0xE0: // Pitch bend
     case 0xF0: // (non-musical commands)
       printf("%d: %02x %02x %02x %02x\r\n", i, cin_cable, midi_cmd, midi_param0, midi_param1);
-      printf("command not handled\r\n", midi_cmd & 0xf0);
+      printf("command not handled\r\n");
       break;
     }
   }
