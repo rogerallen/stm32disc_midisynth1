@@ -45,11 +45,6 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-// we have 4 leds
-#define MAX_LED_IDX 4
-// and a number of notes in the song
-#define MAX_NOTE_IDX 30
-
 // defines for wave table
 #define WAVE_TABLE_LENGTH 256
 
@@ -59,11 +54,15 @@
 #define AUDIO_BUFFER_SAMPLES  AUDIO_BUFFER_FRAMES * AUDIO_BUFFER_CHANNELS
 #define AUDIO_BUFFER_BYTES    sizeof(int16_t)*AUDIO_BUFFER_SAMPLES
 
-#define INITIAL_VOLUME 60
+#define INITIAL_VOLUME 70
 #define SAMPLE_RATE    48000
 float   CHROMATIC_BASE = pow(2.0f, 1.0f / 12.0f);
 
-#define RX_BUFF_SIZE 64 /* USB MIDI buffer : max received data 64 bytes */
+// USB MIDI buffer : max received data 64 bytes
+#define RX_BUFF_SIZE 64
+
+// polyphony
+#define MAX_POLYPHONY 10
 
 /* USER CODE END PD */
 
@@ -90,18 +89,20 @@ uint16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
 float wave_table[WAVE_TABLE_LENGTH];
 // set up a small chromatic scale to use
 typedef enum { C4 = 60, Cs4, D4, Ds4, E4, F4, Fs4, G4, Gs4, A4, As4, B4 } note_t;
-// the wave table has a pointer to the current sample
-float cur_wave_table_phase = 0.0;
-// button pushes update the note
-float cur_note_hz = 440.0;
-// play only when button is down
-float cur_volume = 0.0;
 
 extern USBH_HandleTypeDef hUsbHostFS;
 extern ApplicationTypeDef Appli_state;
 
 uint8_t MIDI_RX_Buffer[RX_BUFF_SIZE]; // MIDI reception buffer
 
+uint8_t cur_polyphony = 0;
+// the wave table has a pointer to the current sample
+float cur_wave_table_phases[MAX_POLYPHONY];
+// button pushes update the note
+uint8_t cur_notes[MAX_POLYPHONY];
+float cur_notes_hz[MAX_POLYPHONY];
+// play only when button is down
+float cur_volumes[MAX_POLYPHONY];
 
 /* USER CODE END PV */
 
@@ -120,6 +121,7 @@ void MX_USB_HOST_Process(void);
 float note_to_freq(uint8_t note);
 void init_wave_table(void);
 void init_audio_buffer(void);
+void reset_cur_notes(void);
 void audio_init(void);
 void update_state(void);
 
@@ -525,15 +527,15 @@ void update_state(void)
   if((last_user_button_state == GPIO_PIN_RESET) &&
      (user_button_state == GPIO_PIN_SET)) {
     HAL_GPIO_WritePin(LED_Port, ORANGE_LED, GPIO_PIN_RESET);
-    cur_note_hz = note_to_freq(A4);
     HAL_GPIO_WritePin(LED_Port, ORANGE_LED, user_button_state);
-    cur_volume = 1.0;
+    reset_cur_notes();
+    cur_volumes[0] = 1.0;
     printf("pushbutton note_on\r\n");
   }
   else if ((last_user_button_state == GPIO_PIN_SET) &&
            (user_button_state == GPIO_PIN_RESET)) {
     HAL_GPIO_WritePin(LED_Port, ORANGE_LED, user_button_state);
-    cur_volume = 0.0;
+    reset_cur_notes();
     printf("pushbutton note_off\r\n");
   }
   last_user_button_state = user_button_state;
@@ -566,24 +568,47 @@ void init_wave_table(void)
 void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
 {
 
-  float cur_wave_table_phase_inc = (cur_note_hz / SAMPLE_RATE) * WAVE_TABLE_LENGTH;
-
   for(int frame = start_frame; frame < start_frame+num_frames; frame++) {
-    float sample_f = cur_volume * wave_table[(uint32_t)cur_wave_table_phase];
-    uint16_t sample = (uint16_t)(INT16_MAX*sample_f + INT16_MAX);
+    float sample_f = 0.0;
+    // add all the active samples up
+    for(int note = 0; note < MAX_POLYPHONY; note++) {
+      if(cur_volumes[note] > 0.0) {
+        float cur_wave_table_phase_inc = (cur_notes_hz[note] / SAMPLE_RATE) * WAVE_TABLE_LENGTH;
+        sample_f += cur_volumes[note] * wave_table[(uint32_t)cur_wave_table_phases[note]];
+        cur_wave_table_phases[note] += cur_wave_table_phase_inc;
+        if(cur_wave_table_phases[note] > WAVE_TABLE_LENGTH) {
+          cur_wave_table_phases[note] -= WAVE_TABLE_LENGTH;
+        }
+      }
+    }
+    // https://www.cs.cmu.edu/~rbd/papers/cmj-float-to-int.html
+    if (sample_f > 1.0) {
+      sample_f = 1.0;
+    } else if (sample_f < -1.0) {
+      sample_f = -1.0;
+    }
+    uint16_t sample = (((uint16_t) (32767*sample_f + 32768.5)) - 32768);
     // each frame is 2 samples
     audio_buffer[2*frame] = sample;
     audio_buffer[2*frame+1] = sample;
-    cur_wave_table_phase += cur_wave_table_phase_inc;
-    if(cur_wave_table_phase > WAVE_TABLE_LENGTH) {
-      cur_wave_table_phase -= WAVE_TABLE_LENGTH;
-    }
+  }
+}
+
+void reset_cur_notes(void)
+{
+  for(int i = 0; i < MAX_POLYPHONY; i++) {
+    cur_wave_table_phases[i] = 0.0;
+    cur_notes[i] = 0; // only used for midi stuff
+    cur_notes_hz[i] = note_to_freq(A4);
+    cur_volumes[i] = 0.0;
   }
 }
 
 // ======================================================================
 void audio_init(void)
 {
+  reset_cur_notes();
+
   init_wave_table();
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES);
 
@@ -626,15 +651,41 @@ void USBH_MIDI_ReceiveCallback(USBH_HandleTypeDef *phost)
     if(cin_cable == 0) {
       continue;
     }
+    int8_t cur_idx = MAX_POLYPHONY;
     switch(midi_cmd & 0xf0) {
     case 0x80: // Note off
-      cur_volume = 0.0;
-      printf("Note off: %d %d\r\n", midi_param0, midi_param1);
+      for(int8_t i = 0; i < MAX_POLYPHONY; i++) {
+        if(midi_param0 == cur_notes[i]) {
+          cur_idx = i;
+          break;
+        }
+      }
+      if(cur_idx < MAX_POLYPHONY) {
+        printf("Note off: %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
+        cur_notes[cur_idx] = 0;
+        cur_notes_hz[cur_idx] = note_to_freq(0);
+        cur_volumes[cur_idx] = 0.0;
+      } else {
+        printf("Note off: [NOPE] %d %d\r\n", midi_param0, midi_param1);
+      }
       break;
     case 0x90: // Note on
-      cur_note_hz = note_to_freq(midi_param0);
-      cur_volume = (float)midi_param1/127.0;
-      printf("Note on: %d %d\r\n", midi_param0, midi_param1);
+      for(int8_t i = 0; i < MAX_POLYPHONY; i++) {
+        if(0 == cur_notes[i]) {
+          // found a spot!
+          cur_idx = i;
+          break;
+        }
+      }
+      if(cur_idx < MAX_POLYPHONY) {
+        printf("Note on: %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
+        cur_notes[cur_idx] = midi_param0;
+        cur_notes_hz[cur_idx] = note_to_freq(midi_param0);
+        cur_volumes[cur_idx] = 0.3 * (float)midi_param1/127.0;
+      } else {
+        printf("Note on: [NOPE] %d %d\r\n", midi_param0, midi_param1);
+      }
+
       break;
     case 0xa0: // Aftertouch
     case 0xB0: // Continuous controller
