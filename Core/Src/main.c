@@ -54,7 +54,7 @@
 #define AUDIO_BUFFER_SAMPLES  AUDIO_BUFFER_FRAMES * AUDIO_BUFFER_CHANNELS
 #define AUDIO_BUFFER_BYTES    sizeof(int16_t)*AUDIO_BUFFER_SAMPLES
 
-#define INITIAL_VOLUME 70
+#define HARDWARE_VOLUME 86
 #define SAMPLE_RATE    48000
 float   CHROMATIC_BASE = pow(2.0f, 1.0f / 12.0f);
 
@@ -121,6 +121,8 @@ void MX_USB_HOST_Process(void);
 float note_to_freq(uint8_t note);
 void init_wave_table(void);
 void init_audio_buffer(void);
+uint16_t float2uint16(float f);
+void update_audio_buffer(uint32_t start_frame, uint32_t num_frames);
 void reset_cur_notes(void);
 void audio_init(void);
 void update_state(void);
@@ -563,6 +565,15 @@ void init_wave_table(void)
 }
 
 // ======================================================================
+// float to uint16 produces two's complement values with -1.0 => 0x8001,
+// 0.0 => 0x0000 and 1.0 => 0x7fff.  It also has good rounding behavior
+// near 0.0 per https://www.cs.cmu.edu/~rbd/papers/cmj-float-to-int.html
+inline uint16_t float2uint16(float f)
+{
+    return (uint16_t)(((int16_t)(32767*f + 32768.5)) - 32768);
+}
+
+// ======================================================================
 // using cur_phase, read from wave_table[] and update the
 // audio_buffer from start to start+num_frames
 void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
@@ -587,7 +598,7 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
     } else if (sample_f < -1.0) {
       sample_f = -1.0;
     }
-    uint16_t sample = (((uint16_t) (32767*sample_f + 32768.5)) - 32768);
+    uint16_t sample = float2uint16(sample_f);
     // each frame is 2 samples
     audio_buffer[2*frame] = sample;
     audio_buffer[2*frame+1] = sample;
@@ -612,7 +623,7 @@ void audio_init(void)
   init_wave_table();
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES);
 
-  if(BSP_AUDIO_OUT_Init(OUTPUT_DEVICE_HEADPHONE, INITIAL_VOLUME, SAMPLE_RATE) != AUDIO_OK) {
+  if(BSP_AUDIO_OUT_Init(OUTPUT_DEVICE_HEADPHONE, HARDWARE_VOLUME, SAMPLE_RATE) != AUDIO_OK) {
     Error_Handler();
   }
 
