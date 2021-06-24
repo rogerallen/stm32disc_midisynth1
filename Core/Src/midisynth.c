@@ -46,7 +46,6 @@ float wave_table[WAVE_TABLE_LENGTH];
 typedef enum { C4 = 60, Cs4, D4, Ds4, E4, F4, Fs4, G4, Gs4, A4, As4, B4 } note_t;
 
 extern USBH_HandleTypeDef hUsbHostFS;
-extern ApplicationTypeDef Appli_state;
 
 uint8_t MIDI_RX_Buffer[RX_BUFF_SIZE]; // MIDI reception buffer
 
