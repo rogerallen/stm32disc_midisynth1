@@ -10,10 +10,26 @@
 #include "main.h"
 #include "../../Drivers/BSP/STM32F4-Discovery/stm32f4_discovery_audio.h"
 #include <math.h>
+#include <stdio.h>
 
 // ======================================================================
 // private defines
 
+// defines for wave table
+#define WAVE_TABLE_LENGTH 256
+
+// defines for audio buffer sizing
+#define AUDIO_BUFFER_FRAMES   256
+#define AUDIO_BUFFER_CHANNELS 2
+#define AUDIO_BUFFER_SAMPLES  AUDIO_BUFFER_FRAMES * AUDIO_BUFFER_CHANNELS
+#define AUDIO_BUFFER_BYTES    sizeof(int16_t)*AUDIO_BUFFER_SAMPLES
+
+#define HARDWARE_VOLUME 86
+#define SAMPLE_RATE    48000
+
+
+// polyphony
+#define MAX_POLYPHONY 10
 
 // ======================================================================
 // private vars
@@ -42,7 +58,7 @@ float cur_volumes[MAX_POLYPHONY];
 void reset_note(int i) {
   cur_wave_table_phases[i] = 0.0;
   cur_notes[i] = 0; // only used for midi stuff
-  cur_notes_hz[i] = note_to_freq(A4);
+  cur_notes_hz[i] = pitch_to_freq(A4);
   cur_volumes[i] = 0.0;
 }
 
@@ -57,17 +73,50 @@ int8_t get_note(int i) {
   return cur_notes[i];
 }
 
-void note_off(int i)
+void note_off(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
 {
-  cur_notes[i] = 0;
-  cur_notes_hz[i] = note_to_freq(0);
-  cur_volumes[i] = 0.0;
+  int8_t cur_idx = MAX_POLYPHONY;
+  for(int8_t j = 0; j < MAX_POLYPHONY; j++) {
+    if(midi_param0 == get_note(j)) {
+      cur_idx = j;
+      break;
+    }
+  }
+  if(cur_idx < MAX_POLYPHONY) {
+    printf("Note off: %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
+    cur_notes[cur_idx] = 0;
+    cur_notes_hz[cur_idx] = pitch_to_freq(0);
+    cur_volumes[cur_idx] = 0.0;
+  } else {
+    printf("Note off: [NOPE] %d %d\r\n", midi_param0, midi_param1);
+  }
 }
-void note_on(int i, uint8_t param0, uint8_t param1)
+
+void note_on(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
 {
-  cur_notes[i] = param0;
-  cur_notes_hz[i] = note_to_freq(param0);
-  cur_volumes[i] = 0.3 * (float)param1/127.0;
+  int8_t cur_idx = MAX_POLYPHONY;
+  for(int8_t j = 0; j < MAX_POLYPHONY; j++) {
+    if(0 == get_note(j)) {
+      // found a spot!
+      cur_idx = j;
+      break;
+    }
+  }
+  if(cur_idx < MAX_POLYPHONY) {
+    printf("Note on: %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
+    cur_notes[cur_idx] = midi_param0;
+    cur_notes_hz[cur_idx] = pitch_to_freq(midi_param0);
+    cur_volumes[cur_idx] = 0.3 * (float)midi_param1/127.0;
+  } else {
+    printf("Note on: [NOPE] %d %d\r\n", midi_param0, midi_param1);
+  }
+}
+// ======================================================================
+void reset_cur_notes(void)
+{
+  for(int i = 0; i < MAX_POLYPHONY; i++) {
+    reset_note(i);
+  }
 }
 
 // ======================================================================

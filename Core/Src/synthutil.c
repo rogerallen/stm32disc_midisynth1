@@ -13,10 +13,10 @@
 float CHROMATIC_BASE = pow(2.0f, 1.0f / 12.0f);
 
 // ======================================================================
-// convert midi note index to frequency in Hz.  A4 440Hz = midi note 69
-float note_to_freq(uint8_t note)
+// convert midi pitch index to frequency in Hz.  A4 440Hz = midi note 69
+float pitch_to_freq(uint8_t pitch)
 {
-  return 440*pow(CHROMATIC_BASE, (float)note - 69);
+  return 440*pow(CHROMATIC_BASE, (float)pitch - 69);
 }
 
 // ======================================================================
