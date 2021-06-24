@@ -29,6 +29,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "midisynth.h"
+#include "synth.h"
 #include "../../Drivers/USBH_midi_class/Inc/usbh_MIDI.h"
 #include <stdarg.h>
 #include <stdio.h>
