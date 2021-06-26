@@ -26,6 +26,6 @@ typedef struct {
 void wavetable_init(wavetable_state_t *self);
 void wavetable_note_on(wavetable_state_t *self, int8_t pitch, int8_t velocity);
 void wavetable_note_off(wavetable_state_t *self);
-void wavetable_get_samples(wavetable_state_t *self, float *in_samples, float *out_samples, int frame_count);
+void wavetable_get_samples(wavetable_state_t *self, float *out_samples, int frame_count);
 
 #endif /* INC_WAVETABLE_H_ */

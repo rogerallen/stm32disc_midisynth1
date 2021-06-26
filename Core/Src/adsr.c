@@ -6,6 +6,7 @@
  */
 
 #include "adsr.h"
+#include "synthutil.h"
 #include <stdio.h>
 
 float get_sample(adsr_state_t *self, float time);
@@ -56,17 +57,22 @@ void adsr_note_off(adsr_state_t *self, float time)
 }
 
 // ======================================================================
-void adsr_get_samples(adsr_state_t *self, float *in_samples, float *out_samples, int frame_count, float time)
+void adsr_get_samples(adsr_state_t *self, float *inout_samples,int frame_count, float time)
 {
+  float cur_time = time;
   for(int frame = 0; frame < frame_count; frame++) {
-    float sample_f = get_sample(self, time);
+    float sample_f = get_sample(self, cur_time);
     if(frame == 0) {
       //printf("envelope %f %f\r\n",time,sample_f);
     }
-    out_samples[2*frame]   = in_samples[2*frame]   * sample_f;
-    out_samples[2*frame+1] = in_samples[2*frame+1] * sample_f;
+    inout_samples[2*frame]   *= sample_f;
+    inout_samples[2*frame+1] *= sample_f;
+    cur_time = time + (float)frame/SAMPLE_RATE;
   }
 }
+
+// TEST_MODE sets amplitude = 1.0 when active.
+#define TEST_MODE 0
 
 // ======================================================================
 inline float get_sample(adsr_state_t *self, float time)
@@ -81,24 +87,40 @@ inline float get_sample(adsr_state_t *self, float time)
     if (cur_time <= self->attack) {
       // Attack
       self->cur_amplitude = cur_time / self->attack;
+#if TEST_MODE == 1
+      return 1.0;
+#else
       return self->cur_amplitude * self->max_amplitude;
+#endif
     }
     cur_time -= self->attack;
     if (cur_time <= self->decay) {
       // Decay
       self->cur_amplitude =
           self->sustain + (1.0f - self->sustain) * (1.0f - cur_time / self->decay);
+#if TEST_MODE == 1
+      return 1.0;
+#else
       return self->cur_amplitude * self->max_amplitude;
+#endif
     }
     // Sustain
     self->cur_amplitude = self->sustain;
+#if TEST_MODE == 1
+      return 1.0;
+#else
     return self->cur_amplitude * self->max_amplitude;
+#endif
   }
   else {
     float cur_time = time - self->release_time;
     if (cur_time <= self->release) {
       // Release
+#if TEST_MODE == 1
+      return 1.0;
+#else
       return self->release_amplitude * (1.0f - cur_time / self->release) * self->max_amplitude;
+#endif
     }
     // done
     self->cur_amplitude = 0.0f;

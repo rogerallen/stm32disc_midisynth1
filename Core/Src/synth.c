@@ -61,9 +61,6 @@
 // audio buffer that is sent over I2S to DAC
 uint16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
 
-// temp ping-pong buffers to use for float intermediate data
-float sample_buffer[4][AUDIO_BUFFER_SAMPLES];
-
 // midi events pushes update the note
 wavetable_state_t wavetables[MAX_POLYPHONY];
 adsr_state_t envelopes[MAX_POLYPHONY];
@@ -154,24 +151,25 @@ void note_on(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
 // audio_buffer from start to start+num_frames
 void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
 {
+  // temp buffers to use for float intermediate data
+  static float sample_buffer[2][AUDIO_BUFFER_SAMPLES];
 
   memset(&(sample_buffer[0][0]), 0, sizeof(float)*AUDIO_BUFFER_SAMPLES);
-  memset(&(sample_buffer[3][0]), 0, sizeof(float)*AUDIO_BUFFER_SAMPLES);
+  memset(&(sample_buffer[1][0]), 0, sizeof(float)*AUDIO_BUFFER_SAMPLES);
 
   for(int note = 0; note < MAX_POLYPHONY; note++) {
-    // FIXME wavetable doesn't need input
-    wavetable_get_samples(&(wavetables[note]), &(sample_buffer[0][0]), &(sample_buffer[1][0]), num_frames);
-    adsr_get_samples(&(envelopes[note]), &(sample_buffer[1][0]), &(sample_buffer[2][0]), num_frames, synth_time);
+    wavetable_get_samples(&(wavetables[note]), &(sample_buffer[0][0]), num_frames);
+    adsr_get_samples(&(envelopes[note]), &(sample_buffer[0][0]), num_frames, synth_time);
     for(int i = 0; i < num_frames; i++) {
-      sample_buffer[3][2*i] += sample_buffer[2][2*i];
-      sample_buffer[3][2*i+1] += sample_buffer[2][2*i+1];
+      sample_buffer[1][2*i] += sample_buffer[0][2*i];
+      sample_buffer[1][2*i+1] += sample_buffer[0][2*i+1];
     }
   }
 
   int i = 0;
   for(int frame = start_frame; frame < start_frame+num_frames; frame++) {
-    float sample0_f = sample_buffer[3][2*i];
-    float sample1_f = sample_buffer[3][2*i+1];
+    float sample0_f = sample_buffer[1][2*i];
+    float sample1_f = sample_buffer[1][2*i+1];
     sample0_f = (sample0_f > 1.0) ? sample0_f = 1.0 : (sample0_f < -1.0) ? -1.0 : sample0_f;
     sample1_f = (sample1_f > 1.0) ? sample1_f = 1.0 : (sample1_f < -1.0) ? -1.0 : sample1_f;
     audio_buffer[2*frame] = float2uint16(sample0_f);
@@ -186,7 +184,7 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
 void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
 {
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES/2);
-  synth_time += AUDIO_BUFFER_FRAMES/(2.0*SAMPLE_RATE);
+  synth_time += (float)(AUDIO_BUFFER_FRAMES/2)/SAMPLE_RATE;
 }
 
 // ======================================================================
@@ -195,5 +193,5 @@ void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
 void BSP_AUDIO_OUT_TransferComplete_CallBack(void)
 {
   update_audio_buffer(AUDIO_BUFFER_FRAMES/2, AUDIO_BUFFER_FRAMES/2);
-  synth_time += AUDIO_BUFFER_FRAMES/(2.0*SAMPLE_RATE);
+  synth_time += (float)(AUDIO_BUFFER_FRAMES/2)/SAMPLE_RATE;
 }

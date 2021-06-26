@@ -69,12 +69,12 @@ void wavetable_note_off(wavetable_state_t *self)
 }
 
 // ======================================================================
-void wavetable_get_samples(wavetable_state_t *self, float *in_samples, float *out_samples, int frame_count)
+void wavetable_get_samples(wavetable_state_t *self, float *out_samples, int frame_count)
 {
   for(int frame = 0; frame < frame_count; frame++) {
     float sample_f = sine_wave_table[(uint32_t)self->phase];
-    out_samples[2*frame]   = in_samples[2*frame] + sample_f;
-    out_samples[2*frame+1] = in_samples[2*frame+1] + sample_f;
+    out_samples[2*frame]   = sample_f;
+    out_samples[2*frame+1] = sample_f;
     self->phase += self->phase_inc;
     if(self->phase > WAVE_TABLE_LENGTH) {
       self->phase -= WAVE_TABLE_LENGTH;
