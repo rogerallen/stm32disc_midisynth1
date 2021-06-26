@@ -36,11 +36,13 @@
 #include "wavetable.h"
 #include "adsr.h"
 #include "biquad.h"
+#include "reverb.h"
 #include "main.h"
 #include "../../Drivers/BSP/STM32F4-Discovery/stm32f4_discovery_audio.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 // ======================================================================
 // private defines
@@ -68,7 +70,7 @@ uint16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
 wavetable_state_t  wavetables[MAX_POLYPHONY];
 adsr_state_t       envelopes[MAX_POLYPHONY];
 sf_biquad_state_st rlpf;
-
+reverb_state_t     *reverb;
 
 // ======================================================================
 // private function prototypes
@@ -86,9 +88,18 @@ void synth_init(void)
     wavetable_init( &(wavetables[i]) );
     adsr_init( &(envelopes[i]), 0.2, 0.2, 0.8, 0.2, 0.3);
   }
+
   float cutoff = 1000.0;
   float resonance = 3.0;
   sf_lowpass(&rlpf, FRAME_RATE, cutoff, resonance);
+
+  float wet = 0.75;
+  float delay = 1.50;
+  reverb = (reverb_state_t *)malloc(sizeof(reverb_state_t));
+  if(reverb == 0) {
+    Error_Handler();
+  }
+  reverb_init(reverb, wet, delay);
 
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES);
 
@@ -174,11 +185,14 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
   // RLPF buf1 -> buf2
   sf_biquad_process(&rlpf, num_frames, (sf_sample_st *)&(sample_buffer[1][0]), (sf_sample_st *)&(sample_buffer[2][0]));
 
-  // convert buf2 -> uint16 output buffer
+  // Reverb buf2 -> buf1
+  reverb_get_samples(reverb, &(sample_buffer[2][0]), &(sample_buffer[1][0]), num_frames);
+
+  // convert buf1 -> uint16 output buffer
   int i = 0;
   for(int frame = start_frame; frame < start_frame+num_frames; frame++) {
-    float sample0_f = sample_buffer[2][2*i];
-    float sample1_f = sample_buffer[2][2*i+1];
+    float sample0_f = sample_buffer[1][2*i];
+    float sample1_f = sample_buffer[1][2*i+1];
     sample0_f = (sample0_f > 1.0) ? sample0_f = 1.0 : (sample0_f < -1.0) ? -1.0 : sample0_f;
     sample1_f = (sample1_f > 1.0) ? sample1_f = 1.0 : (sample1_f < -1.0) ? -1.0 : sample1_f;
     audio_buffer[2*frame] = float2uint16(sample0_f);

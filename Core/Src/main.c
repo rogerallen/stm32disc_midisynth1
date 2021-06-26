@@ -143,8 +143,8 @@ int main(void)
 
   // just once at the beginning, start the first reception
 
-  synth_init();
   printf("==============================================\r\n");
+  synth_init();
 
   /* USER CODE END 2 */
 
@@ -507,6 +507,7 @@ void update_state(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
+  printf("ERROR HANDLER!!!\r\n");
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
