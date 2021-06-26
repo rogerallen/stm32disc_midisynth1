@@ -4,19 +4,44 @@
  *  Created on: Jun 24, 2021
  *      Author: rallen
  */
-
+//
+// Control Rate interface:
+//  [midi note on/off]
+//     V           V
+//  [Envelope i] [Wavetable i]
+//
+// Audio Rate interface:
+//  [ audio samples required ]
+//        VV
+//  [ Mix i polyphony
+//          VV
+//    [ Wavetable i ]
+//          VV
+//    [ Envelope i ]
+//          VV
+//    Mix ]
+//     VV
+//  [ Pan     ]
+//     VV
+//  [ Compressor ]
+//     VV
+//  [ Res Filter ]
+//     VV
+//  [  Reverb  ]
+//     VV
+//  [  Output  ]
+//
 #include "synth.h"
 #include "synthutil.h"
+#include "wavetable.h"
 #include "main.h"
 #include "../../Drivers/BSP/STM32F4-Discovery/stm32f4_discovery_audio.h"
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 // ======================================================================
 // private defines
-
-// defines for wave table
-#define WAVE_TABLE_LENGTH 256
 
 // defines for audio buffer sizing
 #define AUDIO_BUFFER_FRAMES   256
@@ -25,8 +50,6 @@
 #define AUDIO_BUFFER_BYTES    sizeof(int16_t)*AUDIO_BUFFER_SAMPLES
 
 #define HARDWARE_VOLUME 86
-#define SAMPLE_RATE    48000
-
 
 // polyphony
 #define MAX_POLYPHONY 10
@@ -36,41 +59,66 @@
 
 // audio buffer that is sent over I2S to DAC
 uint16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
-// wave table that is used to update the audio_buffer
-float wave_table[WAVE_TABLE_LENGTH];
 
-// the wave table has a pointer to the current sample
-float cur_wave_table_phases[MAX_POLYPHONY];
-// button pushes update the note
-uint8_t cur_notes[MAX_POLYPHONY];
-float cur_notes_hz[MAX_POLYPHONY];
-// play only when button is down
-float cur_volumes[MAX_POLYPHONY];
+// temp ping-pong buffers to use for float intermediate data
+float sample_buffer[2][AUDIO_BUFFER_SAMPLES];
+
+// midi events pushes update the note
+wavetable_state_t wavetables[MAX_POLYPHONY];
 
 // ======================================================================
 // private function prototypes
 
+void reset_note(int i);
+int8_t get_note(int i);
+void init_audio_buffer(void);
+void update_audio_buffer(uint32_t start_frame, uint32_t num_frames);
 
 // ======================================================================
 // user code
 
 // ======================================================================
+void audio_init(void)
+{
+  for(int i=0; i < MAX_POLYPHONY; i++) {
+    wavetable_init( &(wavetables[i]) );
+  }
+  //reset_cur_notes();
+  //init_wave_table();
+
+  update_audio_buffer(0, AUDIO_BUFFER_FRAMES);
+
+  if(BSP_AUDIO_OUT_Init(OUTPUT_DEVICE_HEADPHONE, HARDWARE_VOLUME, SAMPLE_RATE) != AUDIO_OK) {
+    Error_Handler();
+  }
+
+  // tell the chip to start DMA from audio_buffer
+  BSP_AUDIO_OUT_Play(&(audio_buffer[0]), AUDIO_BUFFER_BYTES);
+}
+
+
+// ======================================================================
 void reset_note(int i) {
-  cur_wave_table_phases[i] = 0.0;
-  cur_notes[i] = 0; // only used for midi stuff
-  cur_notes_hz[i] = pitch_to_freq(A4);
-  cur_volumes[i] = 0.0;
+  wavetable_note_off( &(wavetables[i]) ); // FIXME? freq=A4?
+}
+
+// ======================================================================
+void reset_cur_notes(void)
+{
+  for(int i = 0; i < MAX_POLYPHONY; i++) {
+    reset_note(i);
+  }
 }
 
 // ======================================================================
 // for pushbutton -- just activate one voice after resetting all others
 void activate_one_voice(void)
 {
-  cur_volumes[0] = 1.0;
+  wavetables[0].volume = 1.0;
 }
 
-int8_t get_note(int i) {
-  return cur_notes[i];
+int8_t get_note(int i) {  // fixme get pitch
+  return wavetables[i].pitch;
 }
 
 void note_off(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
@@ -84,9 +132,7 @@ void note_off(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
   }
   if(cur_idx < MAX_POLYPHONY) {
     printf("Note off: %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
-    cur_notes[cur_idx] = 0;
-    cur_notes_hz[cur_idx] = pitch_to_freq(0);
-    cur_volumes[cur_idx] = 0.0;
+    wavetable_note_off(&(wavetables[cur_idx]));
   } else {
     printf("Note off: [NOPE] %d %d\r\n", midi_param0, midi_param1);
   }
@@ -104,50 +150,11 @@ void note_on(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
   }
   if(cur_idx < MAX_POLYPHONY) {
     printf("Note on: %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
-    cur_notes[cur_idx] = midi_param0;
-    cur_notes_hz[cur_idx] = pitch_to_freq(midi_param0);
-    cur_volumes[cur_idx] = 0.3 * (float)midi_param1/127.0;
+    wavetable_note_on(&(wavetables[cur_idx]), midi_param0, midi_param1);
   } else {
     printf("Note on: [NOPE] %d %d\r\n", midi_param0, midi_param1);
   }
 }
-// ======================================================================
-void reset_cur_notes(void)
-{
-  for(int i = 0; i < MAX_POLYPHONY; i++) {
-    reset_note(i);
-  }
-}
-
-// ======================================================================
-// create a wave_table with a single sine wave cycle.
-// values are stored as float to make further math easy.
-void init_wave_table(void)
-{
-  float phase_inc = (2.0f * (float)M_PI) / (float)WAVE_TABLE_LENGTH;
-  float phase = 0;
-  for (int i = 0; i < WAVE_TABLE_LENGTH; i++) {
-    wave_table[i] = sin(phase);
-    phase += phase_inc;
-  }
-}
-
-// ======================================================================
-void audio_init(void)
-{
-  reset_cur_notes();
-
-  init_wave_table();
-  update_audio_buffer(0, AUDIO_BUFFER_FRAMES);
-
-  if(BSP_AUDIO_OUT_Init(OUTPUT_DEVICE_HEADPHONE, HARDWARE_VOLUME, SAMPLE_RATE) != AUDIO_OK) {
-    Error_Handler();
-  }
-
-  // tell the chip to start DMA from audio_buffer
-  BSP_AUDIO_OUT_Play(&(audio_buffer[0]), AUDIO_BUFFER_BYTES);
-}
-
 
 // ======================================================================
 // using cur_phase, read from wave_table[] and update the
@@ -155,44 +162,38 @@ void audio_init(void)
 void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
 {
 
+  int src = 0, dst = 1;
+  memset(&(sample_buffer[src][0]), 0, sizeof(float)*AUDIO_BUFFER_SAMPLES);
+
+  for(int note = 0; note < MAX_POLYPHONY; note++) {
+    wavetable_add_samples(&(wavetables[note]), &(sample_buffer[src][0]), &(sample_buffer[dst][0]), num_frames);
+    src = src == 0 ? 1 : 0;
+    dst = dst == 0 ? 1 : 0;
+  }
+
+  int i = 0;
   for(int frame = start_frame; frame < start_frame+num_frames; frame++) {
-    float sample_f = 0.0;
-    // add all the active samples up
-    for(int note = 0; note < MAX_POLYPHONY; note++) {
-      if(cur_volumes[note] > 0.0) {
-        float cur_wave_table_phase_inc = (cur_notes_hz[note] / SAMPLE_RATE) * WAVE_TABLE_LENGTH;
-        sample_f += cur_volumes[note] * wave_table[(uint32_t)cur_wave_table_phases[note]];
-        cur_wave_table_phases[note] += cur_wave_table_phase_inc;
-        if(cur_wave_table_phases[note] > WAVE_TABLE_LENGTH) {
-          cur_wave_table_phases[note] -= WAVE_TABLE_LENGTH;
-        }
-      }
-    }
-    // https://www.cs.cmu.edu/~rbd/papers/cmj-float-to-int.html
-    if (sample_f > 1.0) {
-      sample_f = 1.0;
-    } else if (sample_f < -1.0) {
-      sample_f = -1.0;
-    }
-    uint16_t sample = float2uint16(sample_f);
-    // each frame is 2 samples
-    audio_buffer[2*frame] = sample;
-    audio_buffer[2*frame+1] = sample;
+    float sample0_f = sample_buffer[src][2*i];
+    float sample1_f = sample_buffer[src][2*i+1];
+    sample0_f = (sample0_f > 1.0) ? sample0_f = 1.0 : (sample0_f < -1.0) ? -1.0 : sample0_f;
+    sample1_f = (sample1_f > 1.0) ? sample1_f = 1.0 : (sample1_f < -1.0) ? -1.0 : sample1_f;
+    audio_buffer[2*frame] = float2uint16(sample0_f);
+    audio_buffer[2*frame+1] = float2uint16(sample1_f);
+    i++;
   }
 }
 
 // ======================================================================
-// after the first half of the audio_buffer has been
-// transferred, fill that portion with new samples
-// while the second half is being played.
+// after the first half of the audio_buffer has been transferred, fill
+// that portion with new samples while the second half is being played.
 void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
 {
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES/2);
 }
 
 // ======================================================================
-// now the second half has been transferred.
-// fill in the second half with new samples
+// now the second half has been transferred. fill in the second half
+// with new samples.
 void BSP_AUDIO_OUT_TransferComplete_CallBack(void)
 {
   update_audio_buffer(AUDIO_BUFFER_FRAMES/2, AUDIO_BUFFER_FRAMES/2);
