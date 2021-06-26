@@ -107,7 +107,7 @@ inline float get_sample(adsr_state_t *self, float time)
     // Sustain
     self->cur_amplitude = self->sustain;
 #if TEST_MODE == 1
-      return 1.0;
+    return 1.0;
 #else
     return self->cur_amplitude * self->max_amplitude;
 #endif
@@ -132,18 +132,18 @@ inline float get_sample(adsr_state_t *self, float time)
 int8_t adsr_active(adsr_state_t *self, float time)
 {
   if (self->start_time < 0.0) {
-      return 0;
+    return 0;
   }
   else if (time >= self->start_time) {
-      if (self->release_time < 0.0) {
-          return 1; // prior to noteOff
-      }
-      else if (time - self->release_time <= self->release) {
-          return 1; // during release
-      }
-      else {
-          return 0; // after release
-      }
+    if (self->release_time < 0.0) {
+      return 1; // prior to noteOff
+    }
+    else if (time - self->release_time <= self->release) {
+      return 1; // during release
+    }
+    else {
+      return 0; // after release
+    }
   }
   // time prior to startTime?
   return 0;

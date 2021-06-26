@@ -25,6 +25,6 @@ float pitch_to_freq(uint8_t pitch)
 // near 0.0 per https://www.cs.cmu.edu/~rbd/papers/cmj-float-to-int.html
 inline uint16_t float2uint16(float f)
 {
-    return (uint16_t)(((int16_t)(32767*f + 32768.5)) - 32768);
+  return (uint16_t)(((int16_t)(32767*f + 32768.5)) - 32768);
 }
 
