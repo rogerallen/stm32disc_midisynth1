@@ -11,30 +11,31 @@
 //  [Envelope i] [Wavetable i]
 //
 // Audio Rate interface:
-//  [ audio samples required ]
-//        VV
-//  [ Mix i polyphony
-//          VV
-//    [ Wavetable i ]
-//          VV
-//    [ Envelope i ]
-//          VV
-//    Mix ]
-//     VV
-//  [ Pan     ]
-//     VV
-//  [ Compressor ]
-//     VV
-//  [ Res Filter ]
-//     VV
-//  [  Reverb  ]
-//     VV
-//  [  Output  ]
+//  [ audio samples required ] X
+//        VV                   X
+//  [ Mix i polyphony          X
+//          VV                 X
+//    [ Wavetable i ]          X
+//          VV                 X
+//    [ Envelope i ]           X
+//          VV                 X
+//    Mix ]                    X
+//     VV                      _
+//  [ Pan     ]                _
+//     VV                      _
+//  [ Compressor ]             _
+//     VV                      _
+//  [ Res Filter ]             X
+//     VV                      X
+//  [  Reverb  ]               _
+//     VV                      _
+//  [  Output  ]               X
 //
 #include "synth.h"
 #include "synthutil.h"
 #include "wavetable.h"
 #include "adsr.h"
+#include "biquad.h"
 #include "main.h"
 #include "../../Drivers/BSP/STM32F4-Discovery/stm32f4_discovery_audio.h"
 #include <math.h>
@@ -58,14 +59,16 @@
 // ======================================================================
 // private vars
 
+float synth_time = 0;
+
 // audio buffer that is sent over I2S to DAC
 uint16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
 
-// midi events pushes update the note
-wavetable_state_t wavetables[MAX_POLYPHONY];
-adsr_state_t envelopes[MAX_POLYPHONY];
+// synthesis blocks
+wavetable_state_t  wavetables[MAX_POLYPHONY];
+adsr_state_t       envelopes[MAX_POLYPHONY];
+sf_biquad_state_st rlpf;
 
-float synth_time = 0;
 
 // ======================================================================
 // private function prototypes
@@ -83,6 +86,9 @@ void synth_init(void)
     wavetable_init( &(wavetables[i]) );
     adsr_init( &(envelopes[i]), 0.2, 0.2, 0.8, 0.2, 0.3);
   }
+  float cutoff = 1000.0;
+  float resonance = 3.0;
+  sf_lowpass(&rlpf, FRAME_RATE, cutoff, resonance);
 
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES);
 
@@ -152,11 +158,11 @@ void note_on(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
 void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
 {
   // temp buffers to use for float intermediate data
-  static float sample_buffer[2][AUDIO_BUFFER_SAMPLES];
+  static float sample_buffer[3][AUDIO_BUFFER_SAMPLES];
 
   memset(&(sample_buffer[0][0]), 0, sizeof(float)*AUDIO_BUFFER_SAMPLES);
   memset(&(sample_buffer[1][0]), 0, sizeof(float)*AUDIO_BUFFER_SAMPLES);
-
+  // Osc + Env -> buf1
   for(int note = 0; note < MAX_POLYPHONY; note++) {
     wavetable_get_samples(&(wavetables[note]), &(sample_buffer[0][0]), num_frames);
     adsr_get_samples(&(envelopes[note]), &(sample_buffer[0][0]), num_frames, synth_time);
@@ -165,11 +171,14 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
       sample_buffer[1][2*i+1] += sample_buffer[0][2*i+1];
     }
   }
+  // RLPF buf1 -> buf2
+  sf_biquad_process(&rlpf, num_frames, (sf_sample_st *)&(sample_buffer[1][0]), (sf_sample_st *)&(sample_buffer[2][0]));
 
+  // convert buf2 -> uint16 output buffer
   int i = 0;
   for(int frame = start_frame; frame < start_frame+num_frames; frame++) {
-    float sample0_f = sample_buffer[1][2*i];
-    float sample1_f = sample_buffer[1][2*i+1];
+    float sample0_f = sample_buffer[2][2*i];
+    float sample1_f = sample_buffer[2][2*i+1];
     sample0_f = (sample0_f > 1.0) ? sample0_f = 1.0 : (sample0_f < -1.0) ? -1.0 : sample0_f;
     sample1_f = (sample1_f > 1.0) ? sample1_f = 1.0 : (sample1_f < -1.0) ? -1.0 : sample1_f;
     audio_buffer[2*frame] = float2uint16(sample0_f);
