@@ -34,6 +34,7 @@
 #include "synth.h"
 #include "synthutil.h"
 #include "wavetable.h"
+#include "adsr.h"
 #include "main.h"
 #include "../../Drivers/BSP/STM32F4-Discovery/stm32f4_discovery_audio.h"
 #include <math.h>
@@ -61,16 +62,17 @@
 uint16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
 
 // temp ping-pong buffers to use for float intermediate data
-float sample_buffer[2][AUDIO_BUFFER_SAMPLES];
+float sample_buffer[4][AUDIO_BUFFER_SAMPLES];
 
 // midi events pushes update the note
 wavetable_state_t wavetables[MAX_POLYPHONY];
+adsr_state_t envelopes[MAX_POLYPHONY];
+
+float synth_time = 0;
 
 // ======================================================================
 // private function prototypes
 
-void reset_note(int i);
-int8_t get_note(int i);
 void init_audio_buffer(void);
 void update_audio_buffer(uint32_t start_frame, uint32_t num_frames);
 
@@ -78,13 +80,12 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames);
 // user code
 
 // ======================================================================
-void audio_init(void)
+void synth_init(void)
 {
   for(int i=0; i < MAX_POLYPHONY; i++) {
     wavetable_init( &(wavetables[i]) );
+    adsr_init( &(envelopes[i]), 0.2, 0.2, 0.8, 0.2, 0.3);
   }
-  //reset_cur_notes();
-  //init_wave_table();
 
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES);
 
@@ -98,51 +99,38 @@ void audio_init(void)
 
 
 // ======================================================================
-void reset_note(int i) {
-  wavetable_note_off( &(wavetables[i]) ); // FIXME? freq=A4?
-}
-
-// ======================================================================
-void reset_cur_notes(void)
+void synth_all_notes_off(void)
 {
   for(int i = 0; i < MAX_POLYPHONY; i++) {
-    reset_note(i);
+    wavetable_note_off( &(wavetables[i]) );
+    adsr_reset(&(envelopes[i]));
   }
 }
 
 // ======================================================================
-// for pushbutton -- just activate one voice after resetting all others
-void activate_one_voice(void)
-{
-  wavetables[0].volume = 1.0;
-}
-
-int8_t get_note(int i) {  // fixme get pitch
-  return wavetables[i].pitch;
-}
-
 void note_off(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
 {
   int8_t cur_idx = MAX_POLYPHONY;
   for(int8_t j = 0; j < MAX_POLYPHONY; j++) {
-    if(midi_param0 == get_note(j)) {
+    if(midi_param0 == wavetables[j].pitch) {
       cur_idx = j;
       break;
     }
   }
   if(cur_idx < MAX_POLYPHONY) {
     printf("Note off: %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
-    wavetable_note_off(&(wavetables[cur_idx]));
+    adsr_note_off(&(envelopes[cur_idx]), synth_time);
   } else {
     printf("Note off: [NOPE] %d %d\r\n", midi_param0, midi_param1);
   }
 }
 
+// ======================================================================
 void note_on(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
 {
   int8_t cur_idx = MAX_POLYPHONY;
   for(int8_t j = 0; j < MAX_POLYPHONY; j++) {
-    if(0 == get_note(j)) {
+    if(0 == adsr_active(&(envelopes[j]), synth_time)) {
       // found a spot!
       cur_idx = j;
       break;
@@ -151,6 +139,7 @@ void note_on(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
   if(cur_idx < MAX_POLYPHONY) {
     printf("Note on: %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
     wavetable_note_on(&(wavetables[cur_idx]), midi_param0, midi_param1);
+    adsr_note_on(&(envelopes[cur_idx]), midi_param1, synth_time);
   } else {
     printf("Note on: [NOPE] %d %d\r\n", midi_param0, midi_param1);
   }
@@ -162,19 +151,23 @@ void note_on(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
 void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
 {
 
-  int src = 0, dst = 1;
-  memset(&(sample_buffer[src][0]), 0, sizeof(float)*AUDIO_BUFFER_SAMPLES);
+  memset(&(sample_buffer[0][0]), 0, sizeof(float)*AUDIO_BUFFER_SAMPLES);
+  memset(&(sample_buffer[3][0]), 0, sizeof(float)*AUDIO_BUFFER_SAMPLES);
 
   for(int note = 0; note < MAX_POLYPHONY; note++) {
-    wavetable_add_samples(&(wavetables[note]), &(sample_buffer[src][0]), &(sample_buffer[dst][0]), num_frames);
-    src = src == 0 ? 1 : 0;
-    dst = dst == 0 ? 1 : 0;
+    // FIXME wavetable doesn't need input
+    wavetable_get_samples(&(wavetables[note]), &(sample_buffer[0][0]), &(sample_buffer[1][0]), num_frames);
+    adsr_get_samples(&(envelopes[note]), &(sample_buffer[1][0]), &(sample_buffer[2][0]), num_frames, synth_time);
+    for(int i = 0; i < num_frames; i++) {
+      sample_buffer[3][2*i] += sample_buffer[2][2*i];
+      sample_buffer[3][2*i+1] += sample_buffer[2][2*i+1];
+    }
   }
 
   int i = 0;
   for(int frame = start_frame; frame < start_frame+num_frames; frame++) {
-    float sample0_f = sample_buffer[src][2*i];
-    float sample1_f = sample_buffer[src][2*i+1];
+    float sample0_f = sample_buffer[3][2*i];
+    float sample1_f = sample_buffer[3][2*i+1];
     sample0_f = (sample0_f > 1.0) ? sample0_f = 1.0 : (sample0_f < -1.0) ? -1.0 : sample0_f;
     sample1_f = (sample1_f > 1.0) ? sample1_f = 1.0 : (sample1_f < -1.0) ? -1.0 : sample1_f;
     audio_buffer[2*frame] = float2uint16(sample0_f);
@@ -189,6 +182,7 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
 void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
 {
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES/2);
+  synth_time += AUDIO_BUFFER_FRAMES/(2.0*SAMPLE_RATE);
 }
 
 // ======================================================================
@@ -197,4 +191,5 @@ void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
 void BSP_AUDIO_OUT_TransferComplete_CallBack(void)
 {
   update_audio_buffer(AUDIO_BUFFER_FRAMES/2, AUDIO_BUFFER_FRAMES/2);
+  synth_time += AUDIO_BUFFER_FRAMES/(2.0*SAMPLE_RATE);
 }

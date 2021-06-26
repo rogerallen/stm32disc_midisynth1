@@ -48,7 +48,6 @@ void wavetable_init(wavetable_state_t *self)
   self->pitch     = 0;
   self->pitch_hz  = pitch_to_freq(A4);
   self->phase_inc = (self->pitch_hz / SAMPLE_RATE) * WAVE_TABLE_LENGTH;
-  self->volume    = 0;
 }
 
 // ======================================================================
@@ -58,7 +57,6 @@ void wavetable_note_on(wavetable_state_t *self, int8_t pitch, int8_t velocity)
   self->pitch     = pitch;
   self->pitch_hz  = pitch_to_freq(pitch);
   self->phase_inc = (self->pitch_hz / SAMPLE_RATE) * WAVE_TABLE_LENGTH;
-  self->volume    =  0.3 * (float)velocity/127.0;
 }
 
 // ======================================================================
@@ -68,14 +66,13 @@ void wavetable_note_off(wavetable_state_t *self)
   self->pitch     = 0;
   self->pitch_hz  = pitch_to_freq(A4);
   self->phase_inc = (self->pitch_hz / SAMPLE_RATE) * WAVE_TABLE_LENGTH;
-  self->volume    = 0;
 }
 
 // ======================================================================
-void wavetable_add_samples(wavetable_state_t *self, float *in_samples, float *out_samples, int frame_count)
+void wavetable_get_samples(wavetable_state_t *self, float *in_samples, float *out_samples, int frame_count)
 {
   for(int frame = 0; frame < frame_count; frame++) {
-    float sample_f = self->volume * sine_wave_table[(uint32_t)self->phase];
+    float sample_f = sine_wave_table[(uint32_t)self->phase];
     out_samples[2*frame]   = in_samples[2*frame] + sample_f;
     out_samples[2*frame+1] = in_samples[2*frame+1] + sample_f;
     self->phase += self->phase_inc;

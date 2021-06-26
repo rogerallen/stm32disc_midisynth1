@@ -143,7 +143,7 @@ int main(void)
 
   // just once at the beginning, start the first reception
 
-  audio_init();
+  synth_init();
   printf("Midisynth Initialized\r\n");
 
   /* USER CODE END 2 */
@@ -483,14 +483,14 @@ void update_state(void)
      (user_button_state == GPIO_PIN_SET)) {
     HAL_GPIO_WritePin(LED_Port, ORANGE_LED, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(LED_Port, ORANGE_LED, user_button_state);
-    reset_cur_notes();
-    activate_one_voice();
+    synth_all_notes_off();
+    note_on(0x90, 69, 0x7f);
     printf("pushbutton note_on\r\n");
   }
   else if ((last_user_button_state == GPIO_PIN_SET) &&
            (user_button_state == GPIO_PIN_RESET)) {
     HAL_GPIO_WritePin(LED_Port, ORANGE_LED, user_button_state);
-    reset_cur_notes();
+    synth_all_notes_off();
     printf("pushbutton note_off\r\n");
   }
   last_user_button_state = user_button_state;

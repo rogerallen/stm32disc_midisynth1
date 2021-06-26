@@ -21,12 +21,11 @@ typedef struct {
   float phase_inc;
   int8_t pitch;
   float pitch_hz;
-  float volume;
 } wavetable_state_t;
 
 void wavetable_init(wavetable_state_t *self);
 void wavetable_note_on(wavetable_state_t *self, int8_t pitch, int8_t velocity);
 void wavetable_note_off(wavetable_state_t *self);
-void wavetable_add_samples(wavetable_state_t *self, float *in_samples, float *out_samples, int frame_count);
+void wavetable_get_samples(wavetable_state_t *self, float *in_samples, float *out_samples, int frame_count);
 
 #endif /* INC_WAVETABLE_H_ */
