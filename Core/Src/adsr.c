@@ -67,7 +67,7 @@ void adsr_get_samples(adsr_state_t *self, float *inout_samples,int frame_count, 
     }
     inout_samples[2*frame]   *= sample_f;
     inout_samples[2*frame+1] *= sample_f;
-    cur_time = time + (float)frame/SAMPLE_RATE;
+    cur_time = time + (float)frame/FRAME_RATE;
   }
 }
 

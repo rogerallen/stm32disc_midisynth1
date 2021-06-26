@@ -47,7 +47,7 @@ void wavetable_init(wavetable_state_t *self)
   self->phase     = 0;
   self->pitch     = 0;
   self->pitch_hz  = pitch_to_freq(A4);
-  self->phase_inc = (self->pitch_hz / SAMPLE_RATE) * WAVE_TABLE_LENGTH;
+  self->phase_inc = (self->pitch_hz / FRAME_RATE) * WAVE_TABLE_LENGTH;
 }
 
 // ======================================================================
@@ -56,7 +56,7 @@ void wavetable_note_on(wavetable_state_t *self, int8_t pitch, int8_t velocity)
   self->phase     = 0;
   self->pitch     = pitch;
   self->pitch_hz  = pitch_to_freq(pitch);
-  self->phase_inc = (self->pitch_hz / SAMPLE_RATE) * WAVE_TABLE_LENGTH;
+  self->phase_inc = (self->pitch_hz / FRAME_RATE) * WAVE_TABLE_LENGTH;
 }
 
 // ======================================================================
@@ -65,7 +65,7 @@ void wavetable_note_off(wavetable_state_t *self)
   self->phase     = 0;
   self->pitch     = 0;
   self->pitch_hz  = pitch_to_freq(A4);
-  self->phase_inc = (self->pitch_hz / SAMPLE_RATE) * WAVE_TABLE_LENGTH;
+  self->phase_inc = (self->pitch_hz / FRAME_RATE) * WAVE_TABLE_LENGTH;
 }
 
 // ======================================================================

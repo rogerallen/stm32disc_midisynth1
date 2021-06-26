@@ -10,7 +10,9 @@
 
 #include <stdint.h>
 
-#define SAMPLE_RATE 48000
+// typically called sample rate, I'm going to be pedantic and name it
+// frame rate since there are 2 stereo samples per frame.
+#define FRAME_RATE 48000
 
 // set up a small chromatic scale to use
 typedef enum { C4 = 60, Cs4, D4, Ds4, E4, F4, Fs4, G4, Gs4, A4, As4, B4 } pitch_t;

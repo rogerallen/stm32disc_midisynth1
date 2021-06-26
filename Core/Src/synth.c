@@ -86,7 +86,7 @@ void synth_init(void)
 
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES);
 
-  if(BSP_AUDIO_OUT_Init(OUTPUT_DEVICE_HEADPHONE, HARDWARE_VOLUME, SAMPLE_RATE) != AUDIO_OK) {
+  if(BSP_AUDIO_OUT_Init(OUTPUT_DEVICE_HEADPHONE, HARDWARE_VOLUME, FRAME_RATE) != AUDIO_OK) {
     Error_Handler();
   }
 
@@ -184,7 +184,7 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
 void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
 {
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES/2);
-  synth_time += (float)(AUDIO_BUFFER_FRAMES/2)/SAMPLE_RATE;
+  synth_time += (float)(AUDIO_BUFFER_FRAMES/2)/FRAME_RATE;
 }
 
 // ======================================================================
@@ -193,5 +193,5 @@ void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
 void BSP_AUDIO_OUT_TransferComplete_CallBack(void)
 {
   update_audio_buffer(AUDIO_BUFFER_FRAMES/2, AUDIO_BUFFER_FRAMES/2);
-  synth_time += (float)(AUDIO_BUFFER_FRAMES/2)/SAMPLE_RATE;
+  synth_time += (float)(AUDIO_BUFFER_FRAMES/2)/FRAME_RATE;
 }
