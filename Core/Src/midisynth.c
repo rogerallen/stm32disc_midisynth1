@@ -37,7 +37,6 @@ void decode_midi(uint16_t i, uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi
 // start the process of receiving midi info into the MIDI_RX_Buffer
 void start_midi(void)
 {
-  printf("start_midi\r\n");
   USBH_MIDI_Receive(&hUsbHostFS, MIDI_RX_Buffer, RX_BUFF_SIZE);
 }
 

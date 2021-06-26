@@ -113,6 +113,10 @@ void note_off(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
   int8_t cur_idx = MAX_POLYPHONY;
   for(int8_t j = 0; j < MAX_POLYPHONY; j++) {
     if(midi_param0 == wavetables[j].pitch) {
+      if(1 == adsr_releasing(&(envelopes[j]), synth_time)) {
+        // release already in progress here, keep looking
+        continue;
+      }
       cur_idx = j;
       break;
     }
@@ -137,11 +141,11 @@ void note_on(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
     }
   }
   if(cur_idx < MAX_POLYPHONY) {
-    printf("Note on: %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
+    printf("Note on:  %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
     wavetable_note_on(&(wavetables[cur_idx]), midi_param0, midi_param1);
     adsr_note_on(&(envelopes[cur_idx]), midi_param1, synth_time);
   } else {
-    printf("Note on: [NOPE] %d %d\r\n", midi_param0, midi_param1);
+    printf("Note on:  [NOPE] %d %d\r\n", midi_param0, midi_param1);
   }
 }
 

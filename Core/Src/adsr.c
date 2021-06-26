@@ -34,7 +34,7 @@ void adsr_reset(adsr_state_t *self)
 // ======================================================================
 void adsr_note_on(adsr_state_t *self, int8_t velocity, float time)
 {
-  printf("adsr note on %f\r\n",time);
+  //printf("adsr note on %f\r\n",time);
   self->max_amplitude = self->scale * (float)velocity/127.0;
   self->start_time = time;
   self->release_time = -1;
@@ -45,7 +45,12 @@ void adsr_note_on(adsr_state_t *self, int8_t velocity, float time)
 // ======================================================================
 void adsr_note_off(adsr_state_t *self, float time)
 {
-  printf("adsr note off\r\n");
+  if(self->release_time > 0) {
+    // we are already releasing (should not get here)
+    printf("adsr note off [NOPE, ERROR] %f\r\n", time);
+    return;
+  }
+  //printf("adsr note off %f\r\n", time);
   self->release_time = time;
   self->release_amplitude = self->cur_amplitude;
 }
@@ -96,7 +101,8 @@ inline float get_sample(adsr_state_t *self, float time)
       return self->release_amplitude * (1.0f - cur_time / self->release) * self->max_amplitude;
     }
     // done
-    return 0.0f;
+    self->cur_amplitude = 0.0f;
+    return self->cur_amplitude;
   }
 }
 
@@ -119,6 +125,12 @@ int8_t adsr_active(adsr_state_t *self, float time)
   }
   // time prior to startTime?
   return 0;
+}
+
+// ======================================================================
+int8_t adsr_releasing(adsr_state_t *self, float time)
+{
+  return self->release_time > 0;
 }
 
 

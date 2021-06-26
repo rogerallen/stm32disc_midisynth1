@@ -144,7 +144,7 @@ int main(void)
   // just once at the beginning, start the first reception
 
   synth_init();
-  printf("Midisynth Initialized\r\n");
+  printf("==============================================\r\n");
 
   /* USER CODE END 2 */
 
@@ -157,11 +157,12 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     if(last_Appli_state != Appli_state) {
-      printf("appli_state = %d\r\n", Appli_state);
+      printf("USB Application State: %d\r\n", Appli_state);
       last_Appli_state = Appli_state;
 
       if(Appli_state == APPLICATION_READY) {
         start_midi();
+        printf("Midisynth Started ----------------------------\r\n");
       }
 
     }

@@ -29,5 +29,6 @@ void adsr_note_on(adsr_state_t *self, int8_t velocity, float time);
 void adsr_note_off(adsr_state_t *self, float time);
 void adsr_get_samples(adsr_state_t *self, float *in_samples, float *out_samples, int frame_count, float time);
 int8_t adsr_active(adsr_state_t *self, float time);
+int8_t adsr_releasing(adsr_state_t *self, float time);
 
 #endif /* INC_ADSR_H_ */
