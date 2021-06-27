@@ -56,6 +56,8 @@
 #define HARDWARE_VOLUME 86
 
 // polyphony
+// *WARNING* use 2 voices max for Debug builds (3 is right on the hairy edge)
+// release build can easily do 10
 #define MAX_POLYPHONY 10
 
 // ======================================================================
@@ -84,13 +86,17 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames);
 // ======================================================================
 void synth_init(void)
 {
+  float attack = 0.4;
+  float decay = 0.1;
+  float sustain = 0.8;
+  float release = 0.5;
   for(int i=0; i < MAX_POLYPHONY; i++) {
     wavetable_init( &(wavetables[i]) );
-    adsr_init( &(envelopes[i]), 0.2, 0.2, 0.8, 0.2, 0.3);
+    adsr_init( &(envelopes[i]), attack, decay, sustain, release, 0.3);
   }
 
-  float cutoff = 1000.0;
-  float resonance = 3.0;
+  float cutoff = 600.0;
+  float resonance = 5.0;
   sf_lowpass(&rlpf, FRAME_RATE, cutoff, resonance);
 
   float wet = 0.75;
@@ -168,6 +174,7 @@ void note_on(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
 // audio_buffer from start to start+num_frames
 void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
 {
+  HAL_GPIO_WritePin(LED_Port, RED_LED, GPIO_PIN_SET);
   // temp buffers to use for float intermediate data
   static float sample_buffer[3][AUDIO_BUFFER_SAMPLES];
 
@@ -190,15 +197,17 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
 
   // convert buf1 -> uint16 output buffer
   int i = 0;
+  int outidx = 1;
   for(int frame = start_frame; frame < start_frame+num_frames; frame++) {
-    float sample0_f = sample_buffer[1][2*i];
-    float sample1_f = sample_buffer[1][2*i+1];
+    float sample0_f = sample_buffer[outidx][2*i];
+    float sample1_f = sample_buffer[outidx][2*i+1];
     sample0_f = (sample0_f > 1.0) ? sample0_f = 1.0 : (sample0_f < -1.0) ? -1.0 : sample0_f;
     sample1_f = (sample1_f > 1.0) ? sample1_f = 1.0 : (sample1_f < -1.0) ? -1.0 : sample1_f;
     audio_buffer[2*frame] = float2uint16(sample0_f);
     audio_buffer[2*frame+1] = float2uint16(sample1_f);
     i++;
   }
+  HAL_GPIO_WritePin(LED_Port, RED_LED, GPIO_PIN_RESET);
 }
 
 // ======================================================================
@@ -218,3 +227,10 @@ void BSP_AUDIO_OUT_TransferComplete_CallBack(void)
   update_audio_buffer(AUDIO_BUFFER_FRAMES/2, AUDIO_BUFFER_FRAMES/2);
   synth_time += (float)(AUDIO_BUFFER_FRAMES/2)/FRAME_RATE;
 }
+
+// ======================================================================
+void BSP_AUDIO_OUT_Error_CallBack(void)
+{
+  printf("AUDIO OUT Error\r\n");
+}
+
