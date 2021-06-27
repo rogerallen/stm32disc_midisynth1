@@ -8,6 +8,7 @@
 #include "wavetable.h"
 #include "synthutil.h"
 #include <math.h>
+#include <string.h>
 
 // ======================================================================
 // private defines
@@ -33,6 +34,21 @@ void wavetable_sine_init(void)
   }
 }
 
+void wavetable_saw_init(void)
+{
+  memset(sine_wave_table, 0, sizeof(float) * WAVE_TABLE_LENGTH);
+  float num_octaves = (int)(FRAME_RATE / 2.0 / 440.0);
+  for (int octave = 1; octave < num_octaves; octave++) {
+    float phase_inc = (octave * 2.0 * (float)M_PI) / (float)WAVE_TABLE_LENGTH;
+    float phase = 0;
+    float sign = (octave & 1) ? -1.0f : 1.0f;
+    for (int i = 0; i < WAVE_TABLE_LENGTH; i++) {
+      saw_wave_table[i] += (sign * sin(phase) / octave) * (2.0f / (float)M_PI);
+      phase += phase_inc;
+    }
+  }
+}
+
 // ======================================================================
 // public functions
 
@@ -42,6 +58,7 @@ void wavetable_init(wavetable_state_t *self)
 {
   if(!sine_initialized) {
     wavetable_sine_init();
+    wavetable_saw_init();
     sine_initialized = 1;
   }
   self->phase     = 0;
@@ -72,7 +89,8 @@ void wavetable_note_off(wavetable_state_t *self)
 void wavetable_get_samples(wavetable_state_t *self, float *out_samples, int frame_count)
 {
   for(int frame = 0; frame < frame_count; frame++) {
-    float sample_f = sine_wave_table[(uint32_t)self->phase];
+    //float sample_f = sine_wave_table[(uint32_t)self->phase];
+    float sample_f = saw_wave_table[(uint32_t)self->phase];
     out_samples[2*frame]   = sample_f;
     out_samples[2*frame+1] = sample_f;
     self->phase += self->phase_inc;

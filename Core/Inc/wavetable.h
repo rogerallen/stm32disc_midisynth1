@@ -15,6 +15,7 @@
 
 // wave table that is used to update the audio_buffer
 float sine_wave_table[WAVE_TABLE_LENGTH];
+float saw_wave_table[WAVE_TABLE_LENGTH];
 
 typedef struct {
   float phase;
