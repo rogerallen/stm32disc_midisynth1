@@ -27,8 +27,8 @@
 //     VV                      _
 //  [ Res Filter ]             X
 //     VV                      X
-//  [  Reverb  ]               _
-//     VV                      _
+//  [  Reverb  ]               X
+//     VV                      X
 //  [  Output  ]               X
 //
 #include "synth.h"
