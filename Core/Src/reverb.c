@@ -55,9 +55,9 @@ void reverb_get_samples(reverb_state_t *self, float *in_samples, float *out_samp
   for(int frame = 0; frame < frame_count; frame++) {
     float sample = in_samples[2*frame]; // just left sample for reverb input
     float newsample = comb_filter(&(self->comb0[0]), &(self->comb0_idx), self->comb0_gain, self->comb0_lim, sample);
-    newsample = comb_filter(&(self->comb1[0]), &(self->comb1_idx), self->comb1_gain, self->comb1_lim, sample);
-    newsample = comb_filter(&(self->comb2[0]), &(self->comb2_idx), self->comb2_gain, self->comb2_lim, sample);
-    newsample = comb_filter(&(self->comb3[0]), &(self->comb3_idx), self->comb3_gain, self->comb3_lim, sample);
+    newsample += comb_filter(&(self->comb1[0]), &(self->comb1_idx), self->comb1_gain, self->comb1_lim, sample);
+    newsample += comb_filter(&(self->comb2[0]), &(self->comb2_idx), self->comb2_gain, self->comb2_lim, sample);
+    newsample += comb_filter(&(self->comb3[0]), &(self->comb3_idx), self->comb3_gain, self->comb3_lim, sample);
     newsample /= 4;
     newsample = allpass_filter(&(self->allp0[0]), &(self->allp0_idx), self->allp0_gain, self->allp0_lim, sample);
     newsample = allpass_filter(&(self->allp1[0]), &(self->allp1_idx), self->allp1_gain, self->allp1_lim, sample);
