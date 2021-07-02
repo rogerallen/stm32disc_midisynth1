@@ -66,6 +66,7 @@ UART_HandleTypeDef huart2;
 
 extern USBH_HandleTypeDef hUsbHostFS;
 extern ApplicationTypeDef Appli_state;
+extern synth_state_t the_synth;
 
 /* USER CODE END PV */
 
@@ -92,13 +93,27 @@ int __io_putchar(int ch) {
   HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, 0xFFFF);
   return ch;
 }
+
 // Without syscall.c integrated, a customized _write function has to be defined:
-int _write(int file, char *ptr, int len){
-  int DataIdx;
-  for (DataIdx = 0; DataIdx < len; DataIdx++){
+int _write(int file, char *ptr, int len)
+{
+  for(int i = 0; i < len; i++){
     __io_putchar( *ptr++ );
   }
   return len;
+}
+
+// lots of "answers" & this seems like the only one that works
+// via https://www.openstm32.org/forumthread5466
+int _read (int file, char *ptr, int len)
+{
+  HAL_UART_Receive(&huart2,(uint8_t*)ptr++,1,0xffff);
+  HAL_UART_Transmit(&huart2,(uint8_t *)(ptr-1),1,10);
+  if (*(ptr-1) == '\r'){
+    HAL_UART_Transmit(&huart2,(uint8_t *)"\n",1,10);
+    *(ptr-1) = '\n';
+  }
+  return 1;
 }
 
 /* USER CODE END 0 */
@@ -482,19 +497,67 @@ void update_state(void)
   GPIO_PinState user_button_state = HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin);
   if((last_user_button_state == GPIO_PIN_RESET) &&
      (user_button_state == GPIO_PIN_SET)) {
+    HAL_GPIO_WritePin(LED_Port, ORANGE_LED, GPIO_PIN_SET);
+    synth_all_notes_off();
+
+    printf("begin edit mode\r\n");
+    printf("{\r\n");
+    printf("  wave      = %d\r\n", the_synth.wave);
+    printf("  voices    = %d\r\n", the_synth.voices);
+    printf("  attack    = %.0f\r\n", 1000*the_synth.attack);
+    printf("  decay     = %.0f\r\n", 1000*the_synth.decay);
+    printf("  sustain   = %.0f\r\n", 1000*the_synth.sustain);
+    printf("  release   = %.0f\r\n", 1000*the_synth.release);
+    printf("  scale     = %.0f\r\n", 1000*the_synth.scale);
+    printf("  cutoff    = %.0f\r\n", the_synth.cutoff);
+    printf("  resonance = %.0f\r\n", the_synth.resonance);
+    printf("  wet       = %.0f\r\n", 1000*the_synth.wet);
+    printf("  delay     = %.0f\r\n", 1000*the_synth.delay);
+    printf("}\r\n");
+
+    printf("Enter 'variable value' (e.g. 'attack 500').\r\nEnd edit mode with '.' \r\n");
+    char cmd[32];
+    int v = 0;
+    int done = 0;
+    do {
+      scanf("%s", &(cmd[0]));
+      //printf("\r\ncmd-%s-\r\n", cmd);
+      if (strncmp(&(cmd[0]), ".", 1) == 0) {
+        done = 1;
+      } else {
+        scanf("%d", &v);
+        //printf("\r\nval-%d-\r\n", v);
+        if (strncmp(&(cmd[0]), "wave", 4) == 0) {
+          set_wave(v);
+        } else if (strncmp(&(cmd[0]), "voices", 4) == 0) {
+          set_voices(v);
+        } else if (strncmp(&(cmd[0]), "attack", 4) == 0) {
+          set_attack(v/1000.0);
+        } else if (strncmp(&(cmd[0]), "decay", 4) == 0) {
+          set_decay(v/1000.0);
+        } else if (strncmp(&(cmd[0]), "sustain", 4) == 0) {
+          set_sustain(v/1000.0);
+        } else if (strncmp(&(cmd[0]), "release", 4) == 0) {
+          set_release(v/1000.0);
+        } else if (strncmp(&(cmd[0]), "scale", 4) == 0) {
+          set_scale(v/1000.0);
+        } else if (strncmp(&(cmd[0]), "cutoff", 4) == 0) {
+          set_cutoff(v);
+        } else if (strncmp(&(cmd[0]), "resonance", 4) == 0) {
+          set_resonance(v);
+        } else if (strncmp(&(cmd[0]), "wet", 3) == 0) {
+          set_wet(v/1000.0);
+        } else if (strncmp(&(cmd[0]), "delay", 4) == 0) {
+          set_delay(v/1000.0);
+        } else {
+          printf("unknown cmd: %s\r\n", cmd);
+        }
+      }
+    } while (!done);
+    printf("\r\ndone.\r\n");
     HAL_GPIO_WritePin(LED_Port, ORANGE_LED, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(LED_Port, ORANGE_LED, user_button_state);
-    synth_all_notes_off();
-    note_on(0x90, 69, 0x7f);
-    printf("pushbutton note_on\r\n");
   }
-  else if ((last_user_button_state == GPIO_PIN_SET) &&
-           (user_button_state == GPIO_PIN_RESET)) {
-    HAL_GPIO_WritePin(LED_Port, ORANGE_LED, user_button_state);
-    synth_all_notes_off();
-    printf("pushbutton note_off\r\n");
-  }
-  last_user_button_state = user_button_state;
+  last_user_button_state = GPIO_PIN_RESET;
 
 }
 

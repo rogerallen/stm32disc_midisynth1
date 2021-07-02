@@ -20,7 +20,7 @@
 //    [ Envelope i ]           X
 //          VV                 X
 //    Mix ]                    X
-//     VV                      _
+//     VV                      X
 //  [ Pan     ]                _
 //     VV                      _
 //  [ Compressor ]             _
@@ -33,10 +33,6 @@
 //
 #include "synth.h"
 #include "synthutil.h"
-#include "wavetable.h"
-#include "adsr.h"
-#include "biquad.h"
-#include "reverb.h"
 #include "main.h"
 #include "../../Drivers/BSP/STM32F4-Discovery/stm32f4_discovery_audio.h"
 #include <math.h>
@@ -53,60 +49,133 @@
 #define AUDIO_BUFFER_SAMPLES  AUDIO_BUFFER_FRAMES * AUDIO_BUFFER_CHANNELS
 #define AUDIO_BUFFER_BYTES    sizeof(int16_t)*AUDIO_BUFFER_SAMPLES
 
+// volume of hardware DAC.  86 is the max before distortion occurs
 #define HARDWARE_VOLUME 86
-
-// polyphony
-// *WARNING* use 2 voices max for Debug builds (3 is right on the hairy edge)
-// release build can easily do 10
-#define MAX_POLYPHONY 10
 
 // ======================================================================
 // private vars
 
-float synth_time = 0;
+// only one synth at a time
+synth_state_t the_synth;
 
 // audio buffer that is sent over I2S to DAC
 uint16_t audio_buffer[AUDIO_BUFFER_SAMPLES];
 
-// synthesis blocks
-wavetable_state_t  wavetables[MAX_POLYPHONY];
-adsr_state_t       envelopes[MAX_POLYPHONY];
-sf_biquad_state_st rlpf;
-reverb_state_t     *reverb;
-
 // ======================================================================
 // private function prototypes
 
-void init_audio_buffer(void);
+void audio_init(void);
 void update_audio_buffer(uint32_t start_frame, uint32_t num_frames);
 
 // ======================================================================
 // user code
 
 // ======================================================================
-void synth_init(void)
+void synth_init()
 {
-  float attack = 0.4;
-  float decay = 0.1;
-  float sustain = 0.8;
-  float release = 0.5;
+  the_synth.voices = DEFAULT_VOICES;
+  the_synth.wave = DEFAULT_WAVE;
+
+  the_synth.attack = DEFAULT_ATTACK;
+  the_synth.decay = DEFAULT_DECAY;
+  the_synth.sustain = DEFAULT_SUSTAIN;
+  the_synth.release = DEFAULT_RELEASE;
+  the_synth.scale = DEFAULT_SCALE;
   for(int i=0; i < MAX_POLYPHONY; i++) {
-    wavetable_init( &(wavetables[i]) );
-    adsr_init( &(envelopes[i]), attack, decay, sustain, release, 0.3);
+    wavetable_init( &(the_synth.wavetables[i]) );
+    adsr_init( &(the_synth.envelopes[i]), the_synth.attack, the_synth.decay, the_synth.sustain, the_synth.release, the_synth.scale);
   }
 
-  float cutoff = 600.0;
-  float resonance = 5.0;
-  sf_lowpass(&rlpf, FRAME_RATE, cutoff, resonance);
+  the_synth.cutoff = DEFAULT_CUTOFF;
+  the_synth.resonance = DEFAULT_RESONANCE;
+  sf_lowpass(&(the_synth.rlpf), FRAME_RATE, the_synth.cutoff, the_synth.resonance);
 
-  float wet = 0.75;
-  float delay = 1.50;
-  reverb = (reverb_state_t *)malloc(sizeof(reverb_state_t));
-  if(reverb == 0) {
+  the_synth.wet = DEFAULT_WET;
+  the_synth.delay = DEFAULT_DELAY;
+  the_synth.reverb = (reverb_state_t *)malloc(sizeof(reverb_state_t));
+  if(the_synth.reverb == 0) {
     Error_Handler();
   }
-  reverb_init(reverb, wet, delay);
+  reverb_init(the_synth.reverb, the_synth.wet, the_synth.delay);
 
+  the_synth.synth_time = 0.0;
+
+  audio_init();
+
+}
+
+// ======================================================================
+void set_wave(uint8_t v)
+{
+  the_synth.wave = v;
+  for(int i=0; i < MAX_POLYPHONY; i++) {
+    the_synth.wavetables[i].wave = v;
+  }
+}
+void set_voices(uint8_t v)
+{
+  the_synth.voices = v;  // FIXME use this
+}
+void set_attack(float v)
+{
+  the_synth.attack = v;
+  for(int i=0; i < MAX_POLYPHONY; i++) {
+    the_synth.envelopes[i].attack = v;
+  }
+}
+void set_decay(float v)
+{
+  the_synth.decay = v;
+  for(int i=0; i < MAX_POLYPHONY; i++) {
+    the_synth.envelopes[i].decay = v;
+  }
+}
+void set_sustain(float v)
+{
+  the_synth.sustain = v;
+  for(int i=0; i < MAX_POLYPHONY; i++) {
+    the_synth.envelopes[i].sustain = v;
+  }
+}
+void set_release(float v)
+{
+  the_synth.release = v;
+  for(int i=0; i < MAX_POLYPHONY; i++) {
+    the_synth.envelopes[i].release = v;
+  }
+}
+void set_scale(float v)
+{
+  the_synth.scale = v;
+  for(int i=0; i < MAX_POLYPHONY; i++) {
+    the_synth.envelopes[i].scale = v;
+  }
+}
+void set_cutoff(float v)
+{
+  the_synth.cutoff = v;
+  sf_lowpass(&(the_synth.rlpf), FRAME_RATE, the_synth.cutoff, the_synth.resonance);
+}
+void set_resonance(float v)
+{
+  the_synth.resonance = v;
+  sf_lowpass(&(the_synth.rlpf), FRAME_RATE, the_synth.cutoff, the_synth.resonance);
+}
+void set_wet(float v)
+{
+  the_synth.wet = v;
+  reverb_init(the_synth.reverb, the_synth.wet, the_synth.delay);
+}
+void set_delay(float v)
+{
+  the_synth.delay = v;
+  reverb_init(the_synth.reverb, the_synth.wet, the_synth.delay);
+}
+
+// ======================================================================
+// Call this after synthesizer has been initialized
+void audio_init(void)
+{
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES);
 
   if(BSP_AUDIO_OUT_Init(OUTPUT_DEVICE_HEADPHONE, HARDWARE_VOLUME, FRAME_RATE) != AUDIO_OK) {
@@ -117,13 +186,12 @@ void synth_init(void)
   BSP_AUDIO_OUT_Play(&(audio_buffer[0]), AUDIO_BUFFER_BYTES);
 }
 
-
 // ======================================================================
 void synth_all_notes_off(void)
 {
   for(int i = 0; i < MAX_POLYPHONY; i++) {
-    wavetable_note_off( &(wavetables[i]) );
-    adsr_reset(&(envelopes[i]));
+    wavetable_note_off( &(the_synth.wavetables[i]) );
+    adsr_reset(&(the_synth.envelopes[i]));
   }
 }
 
@@ -132,8 +200,8 @@ void note_off(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
 {
   int8_t cur_idx = MAX_POLYPHONY;
   for(int8_t j = 0; j < MAX_POLYPHONY; j++) {
-    if(midi_param0 == wavetables[j].pitch) {
-      if(1 == adsr_releasing(&(envelopes[j]), synth_time)) {
+    if(midi_param0 == the_synth.wavetables[j].pitch) {
+      if(1 == adsr_releasing(&(the_synth.envelopes[j]), the_synth.synth_time)) {
         // release already in progress here, keep looking
         continue;
       }
@@ -143,7 +211,7 @@ void note_off(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
   }
   if(cur_idx < MAX_POLYPHONY) {
     printf("Note off: %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
-    adsr_note_off(&(envelopes[cur_idx]), synth_time);
+    adsr_note_off(&(the_synth.envelopes[cur_idx]), the_synth.synth_time);
   } else {
     printf("Note off: [NOPE] %d %d\r\n", midi_param0, midi_param1);
   }
@@ -154,7 +222,7 @@ void note_on(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
 {
   int8_t cur_idx = MAX_POLYPHONY;
   for(int8_t j = 0; j < MAX_POLYPHONY; j++) {
-    if(0 == adsr_active(&(envelopes[j]), synth_time)) {
+    if(0 == adsr_active(&(the_synth.envelopes[j]), the_synth.synth_time)) {
       // found a spot!
       cur_idx = j;
       break;
@@ -162,8 +230,8 @@ void note_on(uint8_t midi_cmd, uint8_t midi_param0, uint8_t midi_param1)
   }
   if(cur_idx < MAX_POLYPHONY) {
     printf("Note on:  %d %d %d\r\n", cur_idx, midi_param0, midi_param1);
-    wavetable_note_on(&(wavetables[cur_idx]), midi_param0, midi_param1);
-    adsr_note_on(&(envelopes[cur_idx]), midi_param1, synth_time);
+    wavetable_note_on(&(the_synth.wavetables[cur_idx]), midi_param0, midi_param1);
+    adsr_note_on(&(the_synth.envelopes[cur_idx]), midi_param1, the_synth.synth_time);
   } else {
     printf("Note on:  [NOPE] %d %d\r\n", midi_param0, midi_param1);
   }
@@ -182,18 +250,18 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
   memset(&(sample_buffer[1][0]), 0, sizeof(float)*AUDIO_BUFFER_SAMPLES);
   // Osc + Env -> buf1
   for(int note = 0; note < MAX_POLYPHONY; note++) {
-    wavetable_get_samples(&(wavetables[note]), &(sample_buffer[0][0]), num_frames);
-    adsr_get_samples(&(envelopes[note]), &(sample_buffer[0][0]), num_frames, synth_time);
+    wavetable_get_samples(&(the_synth.wavetables[note]), &(sample_buffer[0][0]), num_frames);
+    adsr_get_samples(&(the_synth.envelopes[note]), &(sample_buffer[0][0]), num_frames, the_synth.synth_time);
     for(int i = 0; i < num_frames; i++) {
       sample_buffer[1][2*i] += sample_buffer[0][2*i];
       sample_buffer[1][2*i+1] += sample_buffer[0][2*i+1];
     }
   }
   // RLPF buf1 -> buf2
-  sf_biquad_process(&rlpf, num_frames, (sf_sample_st *)&(sample_buffer[1][0]), (sf_sample_st *)&(sample_buffer[2][0]));
+  sf_biquad_process(&(the_synth.rlpf), num_frames, (sf_sample_st *)&(sample_buffer[1][0]), (sf_sample_st *)&(sample_buffer[2][0]));
 
   // Reverb buf2 -> buf1
-  reverb_get_samples(reverb, &(sample_buffer[2][0]), &(sample_buffer[1][0]), num_frames);
+  reverb_get_samples(the_synth.reverb, &(sample_buffer[2][0]), &(sample_buffer[1][0]), num_frames);
 
   // convert buf1 -> uint16 output buffer
   int i = 0;
@@ -216,7 +284,7 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
 void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
 {
   update_audio_buffer(0, AUDIO_BUFFER_FRAMES/2);
-  synth_time += (float)(AUDIO_BUFFER_FRAMES/2)/FRAME_RATE;
+  the_synth.synth_time += (float)(AUDIO_BUFFER_FRAMES/2)/FRAME_RATE;
 }
 
 // ======================================================================
@@ -225,7 +293,7 @@ void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
 void BSP_AUDIO_OUT_TransferComplete_CallBack(void)
 {
   update_audio_buffer(AUDIO_BUFFER_FRAMES/2, AUDIO_BUFFER_FRAMES/2);
-  synth_time += (float)(AUDIO_BUFFER_FRAMES/2)/FRAME_RATE;
+  the_synth.synth_time += (float)(AUDIO_BUFFER_FRAMES/2)/FRAME_RATE;
 }
 
 // ======================================================================
