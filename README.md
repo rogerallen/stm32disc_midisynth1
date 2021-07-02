@@ -1,18 +1,26 @@
 # STM32F407VG Discovery Midi Synth
 
 Extension of the https://github.com/rogerallen/stm32disc_synth1 project 
-adding USB MIDI keyboard input.
+adding USB MIDI keyboard input and synth configuration over serial 
+bus (USART2 on PA2 & PA3) connected to computer.
+
+I did this for learning purposes.  Feedback is welcome.
 
 ## Goals
 
+- Next step in making a synth.
 - use STM32CubeIDE
 - USB MIDI Keyboard Control
 - using HAL & BSP_AUDIO Stm32 Firmware
-- a "reasonable"-sounding synth
-- polyphonic wavetable synth 
+- a basic, "reasonable"-sounding synth
+- polyphonic, wavetable-based synth 
 - resonant lowpass filter
 - reverb
 - user button to reset & reprogram synth
+
+## To Do
+
+- Add USB Hub so I can have both keyboard midi device and control midi device connected.  Having USB-connected PC control would be great, too.
  
 ## Usage
 
@@ -21,6 +29,7 @@ adding USB MIDI keyboard input.
 - compile & run
 - plug in midi keyboard (via USB OTG adapter cable) to send note on, note off messages
 - listen to sounds
+- connect computer to serial bus to USART2 on PA2 & PA3
 - press user button to reset & reprogram synth
 
 ## Note
@@ -65,7 +74,7 @@ cutoff 1000
 
 ## License
 
-Who the heck knows?  I pulled stuff from everywhere to make this.
+Who the heck knows?  I pulled stuff from everywhere to make this.  It is likely GPLv2 due to usbh_MIDI.
 
 usbh_MIDI by Xavier Halgand (GPLv2) via https://github.com/MrBlueXav/Dekrispator_v2
 biquad by Sean Connelly (MIT) via https://github.com/velipso/sndfilter
