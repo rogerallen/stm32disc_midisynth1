@@ -18,10 +18,11 @@ float sine_wave_table[WAVE_TABLE_LENGTH];
 float saw_wave_table[WAVE_TABLE_LENGTH];
 
 typedef struct {
-  float phase;
-  float phase_inc;
-  int8_t pitch;
-  float pitch_hz;
+  uint8_t wave;
+  float   phase;
+  float   phase_inc;
+  int8_t  pitch;
+  float   pitch_hz;
 } wavetable_state_t;
 
 void wavetable_init(wavetable_state_t *self);
