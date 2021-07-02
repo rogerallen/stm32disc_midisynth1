@@ -21,6 +21,7 @@ I did this for learning purposes.  Feedback is welcome.
 ## To Do
 
 - Add USB Hub so I can have both keyboard midi device and control midi device connected.  Having USB-connected PC control would be great, too.
+- fix the FIXMEs
  
 ## Usage
 
@@ -62,9 +63,11 @@ End edit mode with '.'
 ```
 
 wave, voices, cutoff and resonance are unscaled but the rest of the values are scaled by 1000.
-(scanf %f was giving me grief)
+(scanf %f was giving me grief so 1.0 is now 1000)
 
-enter in settings and finish with a . 
+!!! Be careful.  Read the code for setting ranges.  No error checking.  !!! 
+
+Enter in settings and finish with a . 
 ```
 wave 1
 attack 800
@@ -79,8 +82,4 @@ Who the heck knows?  I pulled stuff from everywhere to make this.  It is likely 
 usbh_MIDI by Xavier Halgand (GPLv2) via https://github.com/MrBlueXav/Dekrispator_v2
 biquad by Sean Connelly (MIT) via https://github.com/velipso/sndfilter
 reverb written by me but inspired by https://github.com/YetAnotherElectronicsChannel/STM32_DSP_Reverb
-
-
-
-
 
