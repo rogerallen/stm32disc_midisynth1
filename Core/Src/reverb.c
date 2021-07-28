@@ -26,6 +26,13 @@ void reverb_init(reverb_state_t *self, float wet, float delay)
   self->allp0_lim = delay/MAX_DELAY * ALLP0_LEN;
   self->allp1_lim = delay/MAX_DELAY * ALLP1_LEN;
   self->allp2_lim = delay/MAX_DELAY * ALLP2_LEN;
+  self->comb0_idx = 0;
+  self->comb1_idx = 0;
+  self->comb2_idx = 0;
+  self->comb3_idx = 0;
+  self->allp0_idx = 0;
+  self->allp1_idx = 0;
+  self->allp2_idx = 0;
   memset(&(self->comb0[0]), 0, sizeof(float)*COMB0_LEN);
   memset(&(self->comb1[0]), 0, sizeof(float)*COMB1_LEN);
   memset(&(self->comb2[0]), 0, sizeof(float)*COMB2_LEN);
@@ -40,13 +47,6 @@ void reverb_init(reverb_state_t *self, float wet, float delay)
   self->allp0_gain = 0.7;
   self->allp1_gain = 0.7;
   self->allp2_gain = 0.7;
-  self->comb0_idx = 0;
-  self->comb1_idx = 0;
-  self->comb2_idx = 0;
-  self->comb3_idx = 0;
-  self->allp0_idx = 0;
-  self->allp1_idx = 0;
-  self->allp2_idx = 0;
 }
 
 // ======================================================================
@@ -59,9 +59,9 @@ void reverb_get_samples(reverb_state_t *self, float *in_samples, float *out_samp
     newsample += comb_filter(&(self->comb2[0]), &(self->comb2_idx), self->comb2_gain, self->comb2_lim, sample);
     newsample += comb_filter(&(self->comb3[0]), &(self->comb3_idx), self->comb3_gain, self->comb3_lim, sample);
     newsample /= 4;
-    newsample = allpass_filter(&(self->allp0[0]), &(self->allp0_idx), self->allp0_gain, self->allp0_lim, sample);
-    newsample = allpass_filter(&(self->allp1[0]), &(self->allp1_idx), self->allp1_gain, self->allp1_lim, sample);
-    newsample = allpass_filter(&(self->allp2[0]), &(self->allp2_idx), self->allp2_gain, self->allp2_lim, sample);
+    newsample = allpass_filter(&(self->allp0[0]), &(self->allp0_idx), self->allp0_gain, self->allp0_lim, newsample);
+    newsample = allpass_filter(&(self->allp1[0]), &(self->allp1_idx), self->allp1_gain, self->allp1_lim, newsample);
+    newsample = allpass_filter(&(self->allp2[0]), &(self->allp2_idx), self->allp2_gain, self->allp2_lim, newsample);
     newsample = (1.0-self->wet)*sample + self->wet*newsample;
     float newsample1 = (1.0-self->wet)*in_samples[2*frame+1] + self->wet*newsample;
     out_samples[2*frame] = newsample;

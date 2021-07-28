@@ -25,7 +25,7 @@ typedef struct {
   float   pitch_hz;
 } wavetable_state_t;
 
-void wavetable_init(wavetable_state_t *self);
+void wavetable_init(wavetable_state_t *self, uint8_t wave);
 void wavetable_note_on(wavetable_state_t *self, int8_t pitch, int8_t velocity);
 void wavetable_note_off(wavetable_state_t *self);
 void wavetable_get_samples(wavetable_state_t *self, float *out_samples, int frame_count);

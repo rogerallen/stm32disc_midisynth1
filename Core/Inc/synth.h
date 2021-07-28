@@ -47,16 +47,16 @@ typedef struct {
 } synth_state_t;
 
 #define DEFAULT_VOICES    MAX_POLYPHONY
-#define DEFAULT_WAVE      0
-#define DEFAULT_ATTACK    0.2
-#define DEFAULT_DECAY     0.2
+#define DEFAULT_WAVE      1
+#define DEFAULT_ATTACK    0.1
+#define DEFAULT_DECAY     0.1
 #define DEFAULT_SUSTAIN   0.8
-#define DEFAULT_RELEASE   0.2
+#define DEFAULT_RELEASE   0.1
 #define DEFAULT_SCALE     0.3
-#define DEFAULT_CUTOFF    600.0
-#define DEFAULT_RESONANCE 5.0
+#define DEFAULT_CUTOFF    900.0
+#define DEFAULT_RESONANCE 3.0
 #define DEFAULT_WET       0.75
-#define DEFAULT_DELAY     1.50
+#define DEFAULT_DELAY     1.80
 
 void synth_init(void);
 void synth_all_notes_off(void);

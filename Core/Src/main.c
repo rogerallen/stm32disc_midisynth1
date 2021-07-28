@@ -550,7 +550,7 @@ void update_state(void)
         } else if (strncmp(&(cmd[0]), "delay", 4) == 0) {
           set_delay(v/1000.0);
         } else {
-          printf("unknown cmd: %s\r\n", cmd);
+          printf("unknown cmd: %s %d\r\n", cmd, v);
         }
       }
     } while (!done);

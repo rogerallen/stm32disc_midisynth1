@@ -55,14 +55,14 @@ void wavetable_saw_init(void)
 
 
 // ======================================================================
-void wavetable_init(wavetable_state_t *self)
+void wavetable_init(wavetable_state_t *self, uint8_t wave)
 {
   if(!wavetables_initialized) {
     wavetable_sine_init();
     wavetable_saw_init();
     wavetables_initialized = 1;
   }
-  self->wave      = 0;
+  self->wave      = wave;
   self->phase     = 0;
   self->pitch     = 0;
   self->pitch_hz  = pitch_to_freq(A4);

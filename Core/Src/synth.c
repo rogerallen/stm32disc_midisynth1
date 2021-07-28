@@ -82,7 +82,7 @@ void synth_init()
   the_synth.release = DEFAULT_RELEASE;
   the_synth.scale = DEFAULT_SCALE;
   for(int i=0; i < MAX_POLYPHONY; i++) {
-    wavetable_init( &(the_synth.wavetables[i]) );
+    wavetable_init( &(the_synth.wavetables[i]), the_synth.wave );
     adsr_init( &(the_synth.envelopes[i]), the_synth.attack, the_synth.decay, the_synth.sustain, the_synth.release, the_synth.scale);
   }
 
@@ -107,6 +107,7 @@ void synth_init()
 // ======================================================================
 void set_wave(uint8_t v)
 {
+  printf("set: wave = %d\r\n",v);
   the_synth.wave = v;
   for(int i=0; i < MAX_POLYPHONY; i++) {
     the_synth.wavetables[i].wave = v;
@@ -114,10 +115,12 @@ void set_wave(uint8_t v)
 }
 void set_voices(uint8_t v)
 {
+  printf("set: voices = %d\r\n",v);
   the_synth.voices = v;  // FIXME use this
 }
 void set_attack(float v)
 {
+  printf("set: attack = %f\r\n",v);
   the_synth.attack = v;
   for(int i=0; i < MAX_POLYPHONY; i++) {
     the_synth.envelopes[i].attack = v;
@@ -125,6 +128,7 @@ void set_attack(float v)
 }
 void set_decay(float v)
 {
+  printf("set: decay = %f\r\n",v);
   the_synth.decay = v;
   for(int i=0; i < MAX_POLYPHONY; i++) {
     the_synth.envelopes[i].decay = v;
@@ -132,6 +136,7 @@ void set_decay(float v)
 }
 void set_sustain(float v)
 {
+  printf("set: sustain = %f\r\n",v);
   the_synth.sustain = v;
   for(int i=0; i < MAX_POLYPHONY; i++) {
     the_synth.envelopes[i].sustain = v;
@@ -139,6 +144,7 @@ void set_sustain(float v)
 }
 void set_release(float v)
 {
+  printf("set: release = %f\r\n",v);
   the_synth.release = v;
   for(int i=0; i < MAX_POLYPHONY; i++) {
     the_synth.envelopes[i].release = v;
@@ -146,6 +152,7 @@ void set_release(float v)
 }
 void set_scale(float v)
 {
+  printf("set: scale = %f\r\n",v);
   the_synth.scale = v;
   for(int i=0; i < MAX_POLYPHONY; i++) {
     the_synth.envelopes[i].scale = v;
@@ -153,21 +160,25 @@ void set_scale(float v)
 }
 void set_cutoff(float v)
 {
+  printf("set: cutoff = %f\r\n",v);
   the_synth.cutoff = v;
   sf_lowpass(&(the_synth.rlpf), FRAME_RATE, the_synth.cutoff, the_synth.resonance);
 }
 void set_resonance(float v)
 {
+  printf("set: resonance = %f\r\n",v);
   the_synth.resonance = v;
   sf_lowpass(&(the_synth.rlpf), FRAME_RATE, the_synth.cutoff, the_synth.resonance);
 }
 void set_wet(float v)
 {
+  printf("set: wet = %f\r\n",v);
   the_synth.wet = v;
   reverb_init(the_synth.reverb, the_synth.wet, the_synth.delay);
 }
 void set_delay(float v)
 {
+  printf("set: delay = %f\r\n",v);
   the_synth.delay = v;
   reverb_init(the_synth.reverb, the_synth.wet, the_synth.delay);
 }
@@ -257,11 +268,11 @@ void update_audio_buffer(uint32_t start_frame, uint32_t num_frames)
       sample_buffer[1][2*i+1] += sample_buffer[0][2*i+1];
     }
   }
-  // RLPF buf1 -> buf2
-  sf_biquad_process(&(the_synth.rlpf), num_frames, (sf_sample_st *)&(sample_buffer[1][0]), (sf_sample_st *)&(sample_buffer[2][0]));
+  // Reverb buf1 -> buf2
+  reverb_get_samples(the_synth.reverb, &(sample_buffer[1][0]), &(sample_buffer[2][0]), num_frames);
 
-  // Reverb buf2 -> buf1
-  reverb_get_samples(the_synth.reverb, &(sample_buffer[2][0]), &(sample_buffer[1][0]), num_frames);
+  // RLPF buf2 -> buf1
+  sf_biquad_process(&(the_synth.rlpf), num_frames, (sf_sample_st *)&(sample_buffer[2][0]), (sf_sample_st *)&(sample_buffer[1][0]));
 
   // convert buf1 -> uint16 output buffer
   int i = 0;
